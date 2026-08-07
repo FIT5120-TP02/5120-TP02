@@ -3,21 +3,29 @@ from pathlib import Path
 
 import pandas as pd
 
-# Allow this file to import db.py from the project root
+
+# Add the project root so this script can import the shared db.py.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 import db
 
 
-# Candidate relative thresholds to test
-THRESHOLDS = [1.25, 1.50, 1.75, 2.00]
+# Thresholds evaluated during exploratory analysis.
+RELATIVE_THRESHOLDS = [1.25, 1.50, 1.75, 2.00]
+ABSOLUTE_THRESHOLDS = [250, 500, 750, 1000]
+
+# Selected default values based on the historical analysis.
+SELECTED_RELATIVE_THRESHOLD = 1.50
+SELECTED_ABSOLUTE_THRESHOLD = 500
+SELECTED_MIN_OBSERVATIONS = 10
+
+# Peak periods used to separately evaluate commuter-hour behaviour.
+PEAK_HOURS = [7, 8, 9, 16, 17, 18]
 
 
 def load_hourly_data(conn):
-    """
-    Load historical hourly pedestrian counts from MySQL.
-    """
+    """Load historical hourly pedestrian counts from MySQL."""
 
     query = """
         SELECT
@@ -34,246 +42,161 @@ def load_hourly_data(conn):
 
     df = pd.DataFrame(rows)
 
-    # Ensure numeric values
-    df["location_id"] = pd.to_numeric(df["location_id"])
-    df["day_of_week"] = pd.to_numeric(df["day_of_week"])
-    df["hourday"] = pd.to_numeric(df["hourday"])
-    df["pedestrian_count"] = pd.to_numeric(
-        df["pedestrian_count"]
-    )
+    # Explicit conversion protects the analysis from unexpected string values.
+    numeric_columns = [
+        "location_id",
+        "day_of_week",
+        "hourday",
+        "pedestrian_count",
+    ]
+
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(df[column])
 
     return df
 
 
 def calculate_baseline(df):
     """
-    Calculate normal pedestrian activity for every:
+    Calculate the normal pedestrian level for each sensor, weekday and hour.
 
-    sensor × day of week × hour
-
-    Median is used because it is less affected by unusual
-    spikes such as events or disruptions.
+    The median is used instead of the mean because it is less affected by
+    occasional unusually large pedestrian-count spikes.
     """
 
-    baseline = (
+    return (
         df.groupby(
-            [
-                "location_id",
-                "day_of_week",
-                "hourday"
-            ]
+            ["location_id", "day_of_week", "hourday"]
         )
         .agg(
-            median_count=(
-                "pedestrian_count",
-                "median"
-            ),
-            observation_count=(
-                "pedestrian_count",
-                "size"
-            )
+            median_count=("pedestrian_count", "median"),
+            observation_count=("pedestrian_count", "size"),
         )
         .reset_index()
     )
 
-    return baseline
-
 
 def prepare_analysis(df, baseline):
     """
-    Attach each historical observation to its corresponding
-    historical baseline.
+    Join each historical observation to its corresponding baseline and calculate
+    how large the observation is relative to normal activity.
 
-    baseline_ratio:
-
-        pedestrian_count / median_count
-
-    Example:
-
-        current = 1500
-        median = 1000
-
-        ratio = 1.5
+        baseline_ratio = pedestrian_count / historical median
     """
 
     data = df.merge(
         baseline,
-        on=[
-            "location_id",
-            "day_of_week",
-            "hourday"
-        ],
-        how="left"
+        on=["location_id", "day_of_week", "hourday"],
+        how="left",
     )
 
-    # Cannot calculate meaningful ratio when median is zero
-    data = data[
-        data["median_count"] > 0
-    ].copy()
+    # A zero median cannot produce a meaningful relative ratio.
+    data = data[data["median_count"] > 0].copy()
 
     data["baseline_ratio"] = (
-        data["pedestrian_count"]
-        / data["median_count"]
+        data["pedestrian_count"] / data["median_count"]
     )
 
     return data
 
 
-def analyse_thresholds(data, name):
-    """
-    Test candidate threshold multipliers.
-
-    Example:
-
-        threshold = 1.5
-
-        HIGH when:
-
-        current pedestrian count >= 1.5 × historical median
-    """
+def analyse_relative_thresholds(data, name):
+    """Compare candidate relative thresholds."""
 
     results = []
 
-    for threshold in THRESHOLDS:
+    for threshold in RELATIVE_THRESHOLDS:
+        high = data["baseline_ratio"] >= threshold
 
-        high = (
-            data["baseline_ratio"]
-            >= threshold
+        results.append(
+            {
+                "threshold": threshold,
+                "high_records": int(high.sum()),
+                "total_records": len(data),
+                "high_percent": round(high.mean() * 100, 2),
+            }
         )
-
-        results.append({
-            "threshold": threshold,
-            "high_records": int(high.sum()),
-            "total_records": len(data),
-            "high_percent": round(
-                high.mean() * 100,
-                2
-            )
-        })
 
     results_df = pd.DataFrame(results)
 
-    print(f"\n{name}:")
-    print(
-        results_df.to_string(
-            index=False
-        )
-    )
+    print(f"\n{name} relative threshold analysis:")
+    print(results_df.to_string(index=False))
 
     return results_df
 
 
-def ratio_summary(data):
-    """
-    Examine how pedestrian counts vary relative to their
-    historical baseline.
-    """
+def analyse_ratio_distribution(data):
+    """Show how observations are distributed relative to their baselines."""
 
     print("\nBaseline ratio distribution:")
 
-    summary = (
-        data["baseline_ratio"]
-        .describe(
+    print(
+        data["baseline_ratio"].describe(
             percentiles=[
                 0.50,
                 0.75,
                 0.90,
                 0.95,
-                0.99
+                0.99,
             ]
         )
     )
 
-    print(summary)
 
-
-def observation_rule_analysis(baseline):
+def analyse_observation_requirements(baseline):
     """
-    Test possible minimum historical observation requirements.
+    Compare possible minimum observation requirements.
 
-    This helps DS3 later decide when there is not enough
-    historical information to calculate a reliable score.
+    A baseline based on only a few historical records is less reliable than a
+    baseline based on many weeks of observations.
     """
 
     print("\nMinimum observation analysis:")
 
-    for minimum in [
-        5,
-        10,
-        20,
-        30
-    ]:
-
-        valid = (
-            baseline["observation_count"]
-            >= minimum
-        )
-
-        retained = valid.sum()
-
-        percent = (
-            valid.mean() * 100
-        )
+    for minimum in [5, 10, 20, 30]:
+        valid = baseline["observation_count"] >= minimum
 
         print(
             f"Minimum {minimum:2d}: "
-            f"{retained:,} / "
-            f"{len(baseline):,} "
-            f"({percent:.2f}%) retained"
+            f"{valid.sum():,} / {len(baseline):,} "
+            f"({valid.mean() * 100:.2f}%) retained"
         )
 
 
-def absolute_count_analysis(data):
+def analyse_absolute_counts(data):
     """
-    Check actual pedestrian volumes.
+    Examine actual pedestrian volumes.
 
-    A relative ratio alone can be misleading.
-
-    Example:
-
-        baseline = 2
-        current = 4
-        ratio = 2.0
-
-    The ratio is high, but four pedestrians does not represent
-    a highly congested corridor.
+    A relative threshold alone can incorrectly flag low-volume periods. For
+    example, increasing from 2 to 4 pedestrians gives a ratio of 2.0 even though
+    the absolute pedestrian volume remains very low.
     """
+
+    print("\nAbsolute pedestrian count distribution:")
 
     print(
-        "\nAbsolute pedestrian count distribution:"
-    )
-
-    overall = (
-        data["pedestrian_count"]
-        .describe(
+        data["pedestrian_count"].describe(
             percentiles=[
                 0.50,
                 0.75,
                 0.90,
                 0.95,
-                0.99
+                0.99,
             ]
         )
     )
 
-    print(overall)
-
-    # Examine actual counts currently captured by our
-    # candidate 1.5 relative threshold
-    high_ratio = data[
-        data["baseline_ratio"] >= 1.5
+    relative_high = data[
+        data["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
     ]
 
     print(
         "\nPedestrian counts where "
-        "baseline ratio >= 1.5:"
+        f"baseline ratio >= {SELECTED_RELATIVE_THRESHOLD}:"
     )
 
-    high_summary = (
-        high_ratio[
-            "pedestrian_count"
-        ]
-        .describe(
+    print(
+        relative_high["pedestrian_count"].describe(
             percentiles=[
                 0.10,
                 0.25,
@@ -281,20 +204,18 @@ def absolute_count_analysis(data):
                 0.75,
                 0.90,
                 0.95,
-                0.99
+                0.99,
             ]
         )
     )
 
-    print(high_summary)
 
-
-def inspect_extreme_ratios(data):
+def inspect_extreme_ratios(data, limit=20):
     """
-    Inspect unusually large ratios.
+    Display the largest baseline ratios.
 
-    This helps identify cases where a very small baseline
-    causes an unrealistic relative congestion score.
+    This helps identify cases where extremely small historical medians produce
+    very large relative ratios.
     """
 
     extreme = (
@@ -306,143 +227,195 @@ def inspect_extreme_ratios(data):
                 "pedestrian_count",
                 "median_count",
                 "observation_count",
-                "baseline_ratio"
+                "baseline_ratio",
             ]
         ]
-        .sort_values(
-            "baseline_ratio",
-            ascending=False
+        .sort_values("baseline_ratio", ascending=False)
+        .head(limit)
+    )
+
+    print(f"\nTop {limit} baseline ratios:")
+    print(extreme.to_string(index=False))
+
+
+def analyse_combined_thresholds(data, name):
+    """
+    Compare absolute thresholds while keeping the selected relative threshold.
+
+    Candidate HIGH condition:
+
+        baseline_ratio >= 1.50
+        AND
+        pedestrian_count >= absolute threshold
+    """
+
+    results = []
+
+    for absolute_threshold in ABSOLUTE_THRESHOLDS:
+        high = (
+            data["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
+        ) & (
+            data["pedestrian_count"] >= absolute_threshold
         )
-        .head(20)
-    )
 
-    print(
-        "\nTop 20 baseline ratios:"
-    )
-
-    print(
-        extreme.to_string(
-            index=False
+        results.append(
+            {
+                "relative_threshold":
+                    SELECTED_RELATIVE_THRESHOLD,
+                "absolute_threshold":
+                    absolute_threshold,
+                "high_records":
+                    int(high.sum()),
+                "total_records":
+                    len(data),
+                "high_percent":
+                    round(high.mean() * 100, 2),
+            }
         )
+
+    results_df = pd.DataFrame(results)
+
+    print(f"\n{name} combined threshold analysis:")
+    print(results_df.to_string(index=False))
+
+    return results_df
+
+
+def evaluate_selected_defaults(data, name):
+    """
+    Evaluate the selected DS2 default settings.
+
+    Records with fewer than the selected number of historical observations are
+    excluded because their baselines are considered insufficiently supported.
+    """
+
+    valid = data[
+        data["observation_count"] >= SELECTED_MIN_OBSERVATIONS
+    ].copy()
+
+    high = (
+        valid["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
+    ) & (
+        valid["pedestrian_count"] >= SELECTED_ABSOLUTE_THRESHOLD
+    )
+
+    print(f"\n{name} selected-default evaluation:")
+    print(
+        f"Minimum observations : "
+        f"{SELECTED_MIN_OBSERVATIONS}"
+    )
+    print(
+        f"Relative threshold   : "
+        f"{SELECTED_RELATIVE_THRESHOLD}"
+    )
+    print(
+        f"Absolute threshold   : "
+        f"{SELECTED_ABSOLUTE_THRESHOLD}"
+    )
+    print(
+        f"Valid records        : "
+        f"{len(valid):,}"
+    )
+    print(
+        f"HIGH records         : "
+        f"{int(high.sum()):,}"
+    )
+    print(
+        f"HIGH percentage      : "
+        f"{high.mean() * 100:.2f}%"
     )
 
 
-if __name__ == "__main__":
+def main():
+    """Run the complete DS2 threshold analysis."""
 
     conn = db.connect()
 
-    # --------------------------------
-    # Step 1
-    # Load historical data
-    # --------------------------------
+    try:
+        print("Loading historical pedestrian data...")
 
-    print(
-        "Loading historical pedestrian data..."
-    )
+        df = load_hourly_data(conn)
 
-    df = load_hourly_data(conn)
-
-    print(
-        f"Historical records loaded: "
-        f"{len(df):,}"
-    )
-
-    # --------------------------------
-    # Step 2
-    # Calculate baseline
-    # --------------------------------
-
-    baseline = calculate_baseline(df)
-
-    print(
-        f"Baseline slots calculated: "
-        f"{len(baseline):,}"
-    )
-
-    # --------------------------------
-    # Step 3
-    # Match observations to baseline
-    # --------------------------------
-
-    analysis = prepare_analysis(
-        df,
-        baseline
-    )
-
-    print(
-        f"Records used for threshold analysis: "
-        f"{len(analysis):,}"
-    )
-
-    # --------------------------------
-    # Step 4
-    # Analyse all hours
-    # --------------------------------
-
-    analyse_thresholds(
-        analysis,
-        "All hours"
-    )
-
-    # --------------------------------
-    # Step 5
-    # Analyse peak periods
-    # --------------------------------
-
-    peak = analysis[
-        analysis[
-            "hourday"
-        ].isin(
-            [
-                7,
-                8,
-                9,
-                16,
-                17,
-                18
-            ]
+        print(
+            f"Historical records loaded: "
+            f"{len(df):,}"
         )
-    ]
 
-    analyse_thresholds(
-        peak,
-        "Peak hours"
-    )
+        baseline = calculate_baseline(df)
 
-    # --------------------------------
-    # Step 6
-    # Ratio distribution
-    # --------------------------------
+        print(
+            f"Baseline slots calculated: "
+            f"{len(baseline):,}"
+        )
 
-    ratio_summary(
-        analysis
-    )
+        analysis = prepare_analysis(
+            df,
+            baseline,
+        )
 
-    # --------------------------------
-    # Step 7
-    # Historical observation coverage
-    # --------------------------------
+        print(
+            f"Records used for threshold analysis: "
+            f"{len(analysis):,}"
+        )
 
-    observation_rule_analysis(
-        baseline
-    )
+        # Compare candidate relative thresholds across all observations.
+        analyse_relative_thresholds(
+            analysis,
+            "All hours",
+        )
 
-    # --------------------------------
-    # Step 8
-    # Absolute pedestrian counts
-    # --------------------------------
+        # Analyse peak periods separately because the product specifically
+        # supports commuters travelling during peak hours.
+        peak = analysis[
+            analysis["hourday"].isin(PEAK_HOURS)
+        ].copy()
 
-    absolute_count_analysis(
-        analysis
-    )
+        analyse_relative_thresholds(
+            peak,
+            "Peak hours",
+        )
 
-    # --------------------------------
-    # Step 9
-    # Investigate extreme ratios
-    # --------------------------------
+        # Examine the distributions behind the threshold decisions.
+        analyse_ratio_distribution(analysis)
 
-    inspect_extreme_ratios(
-        analysis
-    )
+        analyse_observation_requirements(
+            baseline
+        )
 
-    conn.close()
+        analyse_absolute_counts(
+            analysis
+        )
+
+        inspect_extreme_ratios(
+            analysis
+        )
+
+        # Test whether combining relative and absolute thresholds avoids
+        # incorrectly classifying very small pedestrian counts as HIGH.
+        analyse_combined_thresholds(
+            analysis,
+            "All hours",
+        )
+
+        analyse_combined_thresholds(
+            peak,
+            "Peak hours",
+        )
+
+        # Report the currently selected defaults.
+        evaluate_selected_defaults(
+            analysis,
+            "All hours",
+        )
+
+        evaluate_selected_defaults(
+            peak,
+            "Peak hours",
+        )
+
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()
