@@ -6,11 +6,9 @@
 
 import sys
 
-import pymysql
+import db
 
-from ingesting import DB
-
-conn = pymysql.connect(**DB)
+conn = db.connect()
 with conn.cursor() as cur:
     cur.execute("SHOW TABLES")
     tables = [list(row.values())[0] for row in cur.fetchall()]
