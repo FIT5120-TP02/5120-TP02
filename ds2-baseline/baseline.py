@@ -3,21 +3,22 @@ from pathlib import Path
 
 import pandas as pd
 
+
+# Add project root so this script can import the shared db.py.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 import db
 
 
-def test_connection(conn):
-    with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) AS n FROM pedestrian_count_hour")
-        result = cur.fetchone()
-
-    print(f"Historical rows: {result['n']:,}")
+SELECTED_RELATIVE_THRESHOLD = 1.50
+SELECTED_ABSOLUTE_THRESHOLD = 500
+SELECTED_MIN_OBSERVATIONS = 10
 
 
 def load_hourly_data(conn):
+    """Load historical hourly pedestrian counts."""
+
     query = """
         SELECT
             location_id,
@@ -33,114 +34,283 @@ def load_hourly_data(conn):
 
     df = pd.DataFrame(rows)
 
-    # Ensure numeric types
-    df["location_id"] = pd.to_numeric(df["location_id"])
-    df["day_of_week"] = pd.to_numeric(df["day_of_week"])
-    df["hourday"] = pd.to_numeric(df["hourday"])
-    df["pedestrian_count"] = pd.to_numeric(df["pedestrian_count"])
+    numeric_columns = [
+        "location_id",
+        "day_of_week",
+        "hourday",
+        "pedestrian_count",
+    ]
+
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(df[column])
 
     return df
 
 
-def check_data(df):
-    print("\nMissing values:")
-    print(df.isnull().sum())
-
-    print("\nPedestrian count summary:")
-    print(df["pedestrian_count"].describe())
-
-    print("\nDay of week:")
-    print(sorted(df["day_of_week"].unique()))
-
-    print("\nHours:")
-    print(sorted(df["hourday"].unique()))
-
-    print("\nNumber of sensors:")
-    print(df["location_id"].nunique())
-
-
 def calculate_baseline(df):
-    baseline = (
+    """
+    Calculate the historical baseline for each:
+
+        sensor x weekday x hour
+
+    Median is used by DS3 for sensory scoring.
+    Mean is also stored because the database schema requires it.
+    """
+
+    return (
         df.groupby(
-            ["location_id", "day_of_week", "hourday"]
+            [
+                "location_id",
+                "day_of_week",
+                "hourday",
+            ]
         )
         .agg(
-            median_count=("pedestrian_count", "median"),
-            observation_count=("pedestrian_count", "size")
+            average_count=(
+                "pedestrian_count",
+                "mean",
+            ),
+            median_count=(
+                "pedestrian_count",
+                "median",
+            ),
+            observation_count=(
+                "pedestrian_count",
+                "size",
+            ),
         )
         .reset_index()
     )
 
-    return baseline
-
 
 def check_baseline(baseline):
-    print("\nObservation count summary:")
-    print(baseline["observation_count"].describe())
+    """Print a short validation summary before writing to MySQL."""
 
-    weak = baseline[
-        baseline["observation_count"] < 10
-    ]
-
-    print("\nBaseline slots with fewer than 10 observations:")
-    print(weak.head(20))
-
-    print(f"\nTotal weak baseline slots: {len(weak)}")
-
-
-def check_sensor_coverage(conn, baseline):
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT location_id
-            FROM location
-            WHERE location_type = 'sensor'
-        """)
-
-        all_sensors = {
-            row["location_id"]
-            for row in cur.fetchall()
-        }
-
-    baseline_sensors = set(
-        baseline["location_id"].unique()
+    print("\nBaseline summary:")
+    print(f"Baseline slots: {len(baseline):,}")
+    print(
+        f"Sensors represented: "
+        f"{baseline['location_id'].nunique()}"
     )
 
-    missing = all_sensors - baseline_sensors
+    print("\nObservation-count distribution:")
+    print(
+        baseline["observation_count"].describe()
+    )
 
-    print("\nSensor coverage:")
-    print(f"Total registered sensors: {len(all_sensors)}")
-    print(f"Sensors with historical baseline: {len(baseline_sensors)}")
-    print(f"Sensors without historical baseline: {len(missing)}")
-    print(f"Missing sensor IDs: {sorted(missing)}")
+    weak = baseline[
+        baseline["observation_count"]
+        < SELECTED_MIN_OBSERVATIONS
+    ]
 
-if __name__ == "__main__":
+    print(
+        f"\nSlots below minimum observation requirement "
+        f"({SELECTED_MIN_OBSERVATIONS}): "
+        f"{len(weak):,}"
+    )
+
+
+def save_baseline(conn, baseline):
+    """
+    Insert or update baseline rows.
+
+    The primary key is:
+        location_id + day_of_week + hourday
+
+    ON DUPLICATE KEY UPDATE allows this script to be rerun safely.
+    """
+
+    sql = """
+        INSERT INTO baseline (
+            location_id,
+            day_of_week,
+            hourday,
+            average_count,
+            median_count,
+            observation_count,
+            recomputed_at
+        )
+        VALUES (
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            average_count = VALUES(average_count),
+            median_count = VALUES(median_count),
+            observation_count = VALUES(observation_count),
+            recomputed_at = NOW()
+    """
+
+    rows = [
+        (
+            int(row.location_id),
+            int(row.day_of_week),
+            int(row.hourday),
+            float(row.average_count),
+            float(row.median_count),
+            int(row.observation_count),
+        )
+        for row in baseline.itertuples(index=False)
+    ]
+
+    with conn.cursor() as cur:
+        cur.executemany(
+            sql,
+            rows,
+        )
+
+    conn.commit()
+
+    print(
+        f"\nBaseline rows written: "
+        f"{len(rows):,}"
+    )
+
+
+def save_config(conn):
+    """
+    Store the selected DS2 defaults in the config table.
+
+    These values can later be read by DS3 rather than hardcoded
+    into sensory-scoring logic.
+    """
+
+    configs = [
+        (
+            "relative_threshold",
+            str(SELECTED_RELATIVE_THRESHOLD),
+            "HIGH requires current count to be at least 1.5 times the historical median.",
+        ),
+        (
+            "absolute_threshold",
+            str(SELECTED_ABSOLUTE_THRESHOLD),
+            "Default minimum pedestrian count required before a reading can be considered HIGH.",
+        ),
+        (
+            "minimum_observations",
+            str(SELECTED_MIN_OBSERVATIONS),
+            "Minimum historical observations required for a reliable baseline.",
+        ),
+    ]
+
+    sql = """
+        INSERT INTO config (
+            config_key,
+            value,
+            updated_at,
+            note
+        )
+        VALUES (
+            %s,
+            %s,
+            NOW(),
+            %s
+        )
+        ON DUPLICATE KEY UPDATE
+            value = VALUES(value),
+            updated_at = NOW(),
+            note = VALUES(note)
+    """
+
+    with conn.cursor() as cur:
+        cur.executemany(
+            sql,
+            configs,
+        )
+
+    conn.commit()
+
+    print("\nConfig values written:")
+    for key, value, _ in configs:
+        print(
+            f"  {key} = {value}"
+        )
+
+
+def verify_saved_data(conn):
+    """Check that baseline and config values were saved successfully."""
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS n
+            FROM baseline
+            """
+        )
+
+        baseline_count = cur.fetchone()["n"]
+
+        cur.execute(
+            """
+            SELECT
+                config_key,
+                value,
+                updated_at
+            FROM config
+            ORDER BY config_key
+            """
+        )
+
+        configs = cur.fetchall()
+
+    print(
+        f"\nBaseline rows currently in database: "
+        f"{baseline_count:,}"
+    )
+
+    print("\nCurrent config:")
+
+    for row in configs:
+        print(
+            f"  {row['config_key']} = "
+            f"{row['value']}"
+        )
+
+
+def main():
+    """Calculate and store the DS2 historical baseline."""
+
     conn = db.connect()
 
-    # 1. Test database
-    test_connection(conn)
+    try:
+        print(
+            "Loading historical pedestrian data..."
+        )
 
-    # 2. Load historical pedestrian data
-    df = load_hourly_data(conn)
+        df = load_hourly_data(conn)
 
-    print("\nFirst five historical records:")
-    print(df.head())
+        print(
+            f"Historical records loaded: "
+            f"{len(df):,}"
+        )
 
-    print(f"\nDataset shape: {df.shape}")
+        baseline = calculate_baseline(df)
 
-    # 3. Check historical data
-    check_data(df)
+        check_baseline(
+            baseline
+        )
 
-    # 4. Calculate baseline
-    baseline = calculate_baseline(df)
+        save_baseline(
+            conn,
+            baseline,
+        )
 
-    print("\nFirst 20 baseline records:")
-    print(baseline.head(20))
+        save_config(
+            conn
+        )
 
-    print(f"\nTotal baseline slots: {len(baseline)}")
+        verify_saved_data(
+            conn
+        )
 
-    # 5. Check baseline quality
-    check_baseline(baseline)
+    finally:
+        conn.close()
 
-    check_sensor_coverage(conn, baseline)
-    
-    conn.close()
+
+if __name__ == "__main__":
+    main()
