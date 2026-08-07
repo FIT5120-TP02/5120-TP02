@@ -1,0 +1,13 @@
+# Data, not code. Rebuild it with `python ingesting.py` - takes about 2 minutes.
+*.csv
+*.sql.gz
+onboarding_dump.sql
+
+# Real credentials never go in the repo. The defaults in ingesting.py are for a
+# throwaway local Docker container and are safe to commit; anything pointing at
+# a shared or deployed database belongs in environment variables.
+.env
+
+# Python
+__pycache__/
+*.pyc
