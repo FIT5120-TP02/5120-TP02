@@ -5,7 +5,7 @@ import sys
 
 import pymysql
 
-from ingesting import DB
+import db
 
 MIGRATIONS = pathlib.Path(__file__).parent / "migrations"
 
@@ -67,7 +67,12 @@ def migrate(conn, baseline=False):
 
 
 def reset(conn):
-    """Drop every table, including schema_version. Development only."""
+    """Drop every table, including schema_version. Sandbox only."""
+    if not db.is_local():
+        sys.exit(f"refusing to --reset {db.host()}\n"
+                 f"That is the shared database - dropping it stops five other people.\n"
+                 f"Point DB_HOST at a local sandbox if you really mean to wipe one.")
+
     with conn.cursor() as cur:
         cur.execute("SHOW TABLES")
         tables = [list(row.values())[0] for row in cur.fetchall()]
@@ -84,7 +89,14 @@ def reset(conn):
 
 
 if __name__ == "__main__":
-    conn = pymysql.connect(**DB)
+    # Checked before connecting, so the refusal arrives even when the password
+    # is missing - the point is to stop the command, not to reach the database.
+    if "--reset" in sys.argv and not db.is_local():
+        sys.exit(f"refusing to --reset {db.host()}\n"
+                 f"That is the shared database - dropping it stops five other people.\n"
+                 f"Point DB_HOST at a local sandbox if you really mean to wipe one.")
+
+    conn = db.connect()
     if "--status" in sys.argv:
         status(conn)
     elif "--reset" in sys.argv:

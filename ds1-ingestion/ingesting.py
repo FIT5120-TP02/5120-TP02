@@ -11,15 +11,8 @@ from collections import Counter
 
 import pymysql
 
-DB = dict(
-    host=os.environ.get("DB_HOST", "127.0.0.1"),
-    port=int(os.environ.get("DB_PORT", 3307)),
-    user=os.environ.get("DB_USER", "root"),
-    password=os.environ.get("DB_PASSWORD", "devpassword"),
-    database=os.environ.get("DB_NAME", "onboarding"),
-    charset="utf8mb4",
-    cursorclass=pymysql.cursors.DictCursor,
-)
+import db
+
 
 Sensor_location_url = "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/pedestrian-counting-system-sensor-locations/records"
 Landmark_url = "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/records"
@@ -458,7 +451,7 @@ if __name__ == "__main__":
     if unknown:
         sys.exit(f"unknown job {unknown}; pick from {list(JOBS)}")
 
-    conn = pymysql.connect(**DB)
+    conn = db.connect()
     for name in wanted:
         print(f"--- {name}")
         print(json.dumps(JOBS[name](conn), indent=2))
