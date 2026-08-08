@@ -55,3 +55,17 @@ def test_refuges_fixture_list(client):
     body = response.json()
     assert len(body["refuges"]) >= 1
     assert all("category" in r for r in body["refuges"])
+
+
+def test_register_rejects_password_over_72_bytes(client):
+    response = client.post(
+        "/api/auth/register",
+        json={"username": "toolong", "password": "a" * 73},
+    )
+    assert response.status_code == 422
+
+
+def test_login_with_over_72_byte_password_is_unauthorized_not_500(client):
+    client.post("/api/auth/register", json={"username": "freddy2", "password": "commute123"})
+    response = client.post("/api/auth/login", data={"username": "freddy2", "password": "a" * 73})
+    assert response.status_code == 401

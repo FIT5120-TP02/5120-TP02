@@ -25,18 +25,33 @@ from app.database import get_db
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # bcrypt only looks at the first 72 bytes of a password and raises ValueError
-# on anything longer (since bcrypt 4.1) instead of silently truncating -
-# truncate ourselves so long passwords fail loudly at signup, not at login.
+# on anything longer (since bcrypt 4.1). We used to truncate silently here,
+# but that means two different long passwords sharing the same first 72
+# bytes would hash identically and authenticate as each other - a real
+# password-collision bug. Reject instead of truncating.
 _BCRYPT_MAX_BYTES = 72
 
 
+class PasswordTooLongError(ValueError):
+    """Raised instead of silently truncating a password over bcrypt's 72-byte limit."""
+
+
+def _encode_and_validate(password: str) -> bytes:
+    pw_bytes = password.encode("utf-8")
+    if len(pw_bytes) > _BCRYPT_MAX_BYTES:
+        raise PasswordTooLongError(
+            f"Password must be at most {_BCRYPT_MAX_BYTES} bytes when UTF-8 encoded."
+        )
+    return pw_bytes
+
+
 def hash_password(password: str) -> str:
-    pw_bytes = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    pw_bytes = _encode_and_validate(password)
     return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    pw_bytes = plain_password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    pw_bytes = _encode_and_validate(plain_password)
     return bcrypt.checkpw(pw_bytes, hashed_password.encode("utf-8"))
 
 

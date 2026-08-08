@@ -2,13 +2,23 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------- Auth ----------
 class UserCreate(BaseModel):
     username: str
     password: str = Field(min_length=8)
+
+    @field_validator("password")
+    @classmethod
+    def password_within_bcrypt_limit(cls, value: str) -> str:
+        # bcrypt only uses the first 72 bytes of a password - reject longer
+        # ones at signup instead of letting them get silently truncated
+        # (see app.core.security._encode_and_validate for the same check).
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes when UTF-8 encoded.")
+        return value
 
 
 class UserOut(BaseModel):

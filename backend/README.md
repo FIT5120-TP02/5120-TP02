@@ -71,11 +71,9 @@ The repo already has `ds1-ingestion/`, `ds2-baseline/`, and a root
    migration/script, delete the duplicate definition from `app/models.py`
    instead of letting both sides try to own the same table.
 
-Suggested move once merged into the team repo:
-- `backend/.github/workflows/ci.yml` → repo root `.github/workflows/ci.yml`
-- `backend/.github/PULL_REQUEST_TEMPLATE.md` → repo root `.github/PULL_REQUEST_TEMPLATE.md`
-
-(Kept inside `backend/` here only so this folder is self-contained to hand off.)
+CI workflow and PR template already live at the repo root
+(`.github/workflows/ci.yml`, `.github/PULL_REQUEST_TEMPLATE.md`) - not
+duplicated under `backend/` in this drop.
 
 ## Open items / things to confirm with the team
 
