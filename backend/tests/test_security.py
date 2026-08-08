@@ -41,3 +41,16 @@ def test_two_long_passwords_sharing_a_72_byte_prefix_are_not_confused():
         hash_password(password_a)
     with pytest.raises(PasswordTooLongError):
         hash_password(password_b)
+
+
+def test_missing_jwt_secret_key_raises_clear_error(monkeypatch):
+    from app.core.config import Settings
+
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    # _env_file=None skips reading a local .env file for this one instance -
+    # without it, a developer's real .env (with a real key already filled
+    # in for local dev) would leak through and this test would pass for the
+    # wrong reason regardless of what config.py actually does.
+    settings = Settings(_env_file=None)
+    with pytest.raises(RuntimeError, match="JWT_SECRET_KEY is not set"):
+        _ = settings.resolved_jwt_secret_key

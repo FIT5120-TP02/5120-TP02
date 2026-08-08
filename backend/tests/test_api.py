@@ -69,3 +69,12 @@ def test_login_with_over_72_byte_password_is_unauthorized_not_500(client):
     client.post("/api/auth/register", json={"username": "freddy2", "password": "commute123"})
     response = client.post("/api/auth/login", data={"username": "freddy2", "password": "a" * 73})
     assert response.status_code == 401
+
+
+def test_refuges_returns_empty_list_when_nothing_within_radius(client):
+    # Melbourne CBD fixtures are nowhere near this point (middle of the
+    # Pacific Ocean) - a tiny radius here must return [], not silently
+    # fall back to every fixture regardless of distance.
+    response = client.get("/api/refuges", params={"lat": 0.0, "lng": -160.0, "radius_km": 1.5})
+    assert response.status_code == 200
+    assert response.json()["refuges"] == []

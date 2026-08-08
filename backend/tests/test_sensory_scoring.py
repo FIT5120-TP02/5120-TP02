@@ -81,3 +81,35 @@ def test_zero_baseline_is_treated_as_no_data_not_divide_by_zero():
         {"s1": SensorBaseline("s1", median_count=0, observation_count=30)},
     )
     assert status == NO_DATA
+
+
+def test_mismatched_sensor_sets_never_get_compared():
+    # Reading only exists for s1, baseline only exists for s2 - before the
+    # fix, both "usable" lists were non-empty independently and got
+    # averaged and compared anyway, comparing unrelated sensors.
+    status, notification = score_route(
+        ["s1", "s2"],
+        {"s1": SensorReading("s1", 999)},  # only a reading, no baseline
+        {
+            "s2": SensorBaseline("s2", median_count=10, observation_count=30)
+        },  # only a baseline, no reading
+    )
+    assert status == NO_DATA
+    assert notification is None
+
+
+def test_partial_overlap_only_uses_sensors_with_both_reading_and_baseline():
+    # s1 has both reading and baseline (usable); s2 only has a reading.
+    # Only s1 should be used - if s2 leaked in, the average would be
+    # dragged toward s2's very high reading and wrongly return HIGH.
+    status, _ = score_route(
+        ["s1", "s2"],
+        {
+            "s1": SensorReading("s1", 30),
+            "s2": SensorReading("s2", 999),
+        },
+        {
+            "s1": SensorBaseline("s1", median_count=60, observation_count=30),
+        },
+    )
+    assert status == LOW

@@ -59,15 +59,14 @@ def list_refuges(
         db.query(models.Location).filter(models.Location.location_type.in_(REFUGE_CATEGORIES)).all()
     )
 
-    refuges: list[schemas.RefugeLocationOut] = []
-    for _loc in locations:
-        # location table doesn't carry lat/lng in the current ERD - if/when
-        # DS adds coordinates to `location`, replace this placeholder read.
-        continue  # no-op until lat/lng columns exist; keeps this loop future-ready
+    # `location` table doesn't carry lat/lng in the current ERD yet, so real
+    # rows can't be distance-filtered - if/when DS adds coordinates, read
+    # from `locations` here instead of the fixture list below.
+    del locations
 
-    if not refuges:
-        refuges = [
-            r for r in _FIXTURE_REFUGES if _haversine_km(lat, lng, r.lat, r.lng) <= radius_km
-        ] or _FIXTURE_REFUGES
+    refuges = [r for r in _FIXTURE_REFUGES if _haversine_km(lat, lng, r.lat, r.lng) <= radius_km]
+    # Deliberately no "or _FIXTURE_REFUGES" fallback - respecting radius_km
+    # means genuinely returning an empty list when nothing is within range,
+    # not silently ignoring the radius the caller asked for.
 
     return schemas.RefugeListResponse(refuges=refuges, generated_at=datetime.now(timezone.utc))

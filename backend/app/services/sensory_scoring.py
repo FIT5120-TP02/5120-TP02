@@ -13,6 +13,9 @@ Safety note from the Security Plan: "A false LOW sends a sensory-sensitive
 user into exactly what they're avoiding - NO DATA is a safety control, not
 a data gap." So this function must never guess a LOW/HIGH when the
 underlying data doesn't support it - it must return "NO DATA" instead.
+This includes never comparing a reading from one sensor against a
+baseline from a different sensor - only sensors with BOTH a usable
+baseline and a live reading are compared, on the intersection of the two.
 """
 
 from __future__ import annotations
@@ -51,27 +54,34 @@ def score_route(
       1. Too few sensors matched to the route buffer.
       2. Too few baseline observations for the matched sensors.
       3. No live reading available for the matched sensors right now.
+      4. No sensor has BOTH a usable baseline and a live reading - a
+         reading for sensor A must never be compared against sensor B's
+         baseline just because both individually looked "usable".
     """
     settings = get_settings()
 
     if len(matched_sensor_ids) == 0:
         return NO_DATA, None
 
-    usable_baselines = [
-        baselines[sid]
+    # Only sensors with both a sufficiently-observed baseline AND a live
+    # reading right now are usable - the intersection, not two independent
+    # lists that might not actually refer to the same sensors.
+    usable_sensor_ids = [
+        sid
         for sid in matched_sensor_ids
         if sid in baselines
         and baselines[sid].observation_count >= settings.min_baseline_observations
+        and sid in readings
     ]
-    if not usable_baselines:
+    if not usable_sensor_ids:
         return NO_DATA, None
 
-    usable_readings = [readings[sid] for sid in matched_sensor_ids if sid in readings]
-    if not usable_readings:
-        return NO_DATA, None
-
-    avg_current = sum(r.current_count for r in usable_readings) / len(usable_readings)
-    avg_baseline = sum(b.median_count for b in usable_baselines) / len(usable_baselines)
+    avg_current = sum(readings[sid].current_count for sid in usable_sensor_ids) / len(
+        usable_sensor_ids
+    )
+    avg_baseline = sum(baselines[sid].median_count for sid in usable_sensor_ids) / len(
+        usable_sensor_ids
+    )
 
     if avg_baseline <= 0:
         return NO_DATA, None

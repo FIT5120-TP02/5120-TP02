@@ -37,8 +37,10 @@ class Settings(BaseSettings):
     # set directly, it's used as-is and the DB_* fields above are ignored.
     database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
 
-    # Auth
-    jwt_secret_key: str = "change-me-before-deploy"
+    # Auth - no usable default; must be supplied via env var (or set
+    # explicitly by tests, see tests/conftest.py). A default here would
+    # mean anyone who knows it could forge login tokens.
+    jwt_secret_key: str | None = None
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
@@ -53,6 +55,16 @@ class Settings(BaseSettings):
 
     # CORS
     frontend_origin: str = "http://localhost:5173"
+
+    @property
+    def resolved_jwt_secret_key(self) -> str:
+        if not self.jwt_secret_key:
+            raise RuntimeError(
+                "JWT_SECRET_KEY is not set. Generate one with:\n"
+                '  python -c "import secrets; print(secrets.token_hex(32))"\n'
+                "and set it as an env var - never commit a real secret to the repo."
+            )
+        return self.jwt_secret_key
 
     @property
     def database_url(self) -> str:

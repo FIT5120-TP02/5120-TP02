@@ -61,7 +61,7 @@ def create_access_token(subject: str, expires_minutes: int | None = None) -> str
         minutes=expires_minutes or settings.access_token_expire_minutes
     )
     payload = {"sub": subject, "exp": expire}
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.resolved_jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> str:
@@ -72,7 +72,9 @@ def decode_access_token(token: str) -> str:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.resolved_jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception from None

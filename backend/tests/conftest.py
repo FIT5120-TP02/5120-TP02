@@ -1,6 +1,6 @@
 """
 Test config: point the app at an in-memory sqlite database instead of the
-real Postgres database, and use the mock routing provider so tests don't
+real MySQL (AWS RDS) database, and use the mock routing provider so tests don't
 depend on network access, a live routing service, or filesystem writes.
 """
 
