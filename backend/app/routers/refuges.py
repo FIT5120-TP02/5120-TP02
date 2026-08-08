@@ -6,6 +6,7 @@ quiet public spaces) per the ERD. Falls back to the Prototype slide's
 fixture list (City Library / Park / Albert Park) when the table is empty,
 so the frontend has something to render before the real dataset is loaded.
 """
+
 import math
 from datetime import datetime, timezone
 
@@ -20,9 +21,20 @@ router = APIRouter(prefix="/api/refuges", tags=["refuges"])
 REFUGE_CATEGORIES = {"park", "library", "quiet public space"}
 
 _FIXTURE_REFUGES = [
-    schemas.RefugeLocationOut(location_id=-1, name="City Library", category="library", eta_min=3, lat=-37.8102, lng=144.9628),
-    schemas.RefugeLocationOut(location_id=-2, name="Park", category="park", eta_min=6, lat=-37.8110, lng=144.9640),
-    schemas.RefugeLocationOut(location_id=-3, name="Albert Park", category="park", eta_min=15, lat=-37.8432, lng=144.9700),
+    schemas.RefugeLocationOut(
+        location_id=-1,
+        name="City Library",
+        category="library",
+        eta_min=3,
+        lat=-37.8102,
+        lng=144.9628,
+    ),
+    schemas.RefugeLocationOut(
+        location_id=-2, name="Park", category="park", eta_min=6, lat=-37.8110, lng=144.9640
+    ),
+    schemas.RefugeLocationOut(
+        location_id=-3, name="Albert Park", category="park", eta_min=15, lat=-37.8432, lng=144.9700
+    ),
 ]
 
 
@@ -44,13 +56,11 @@ def list_refuges(
     db: Session = Depends(get_db),
 ):
     locations = (
-        db.query(models.Location)
-        .filter(models.Location.location_type.in_(REFUGE_CATEGORIES))
-        .all()
+        db.query(models.Location).filter(models.Location.location_type.in_(REFUGE_CATEGORIES)).all()
     )
 
     refuges: list[schemas.RefugeLocationOut] = []
-    for loc in locations:
+    for _loc in locations:
         # location table doesn't carry lat/lng in the current ERD - if/when
         # DS adds coordinates to `location`, replace this placeholder read.
         continue  # no-op until lat/lng columns exist; keeps this loop future-ready

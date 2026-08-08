@@ -6,6 +6,7 @@ Run locally:
 
 Docs once running: http://localhost:8000/docs
 """
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

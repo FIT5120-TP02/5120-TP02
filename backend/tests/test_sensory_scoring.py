@@ -5,6 +5,7 @@ Code Quality slide requirement: "Sensory scoring logic must have tests."
 Covers every branch of the NO DATA rule set plus the LOW/HIGH threshold,
 since a wrong LOW/HIGH is a safety issue per the Security Plan slide.
 """
+
 from app.services.sensory_scoring import (
     HIGH,
     LOW,

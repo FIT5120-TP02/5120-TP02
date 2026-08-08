@@ -3,6 +3,7 @@ User preference endpoints - "Users can only access their own data"
 (Security Plan). Every route here is scoped to the authenticated user
 via get_current_user, never by an id passed in the URL/body.
 """
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 

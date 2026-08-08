@@ -12,6 +12,7 @@ Note: every String column has an explicit length. SQLite/Postgres allow
 unbounded VARCHAR, but MySQL (the shared RDS instance) requires a length
 on every VARCHAR column or CREATE TABLE fails at startup.
 """
+
 from sqlalchemy import (
     Boolean,
     Float,
@@ -62,8 +63,12 @@ class Route(Base):
     __tablename__ = "route"
 
     route_id: Mapped[int] = mapped_column(primary_key=True)
-    preference_id: Mapped[int] = mapped_column(ForeignKey("preferences.preference_id"), nullable=False)
-    start_location_id: Mapped[int] = mapped_column(ForeignKey("location.location_id"), nullable=False)
+    preference_id: Mapped[int] = mapped_column(
+        ForeignKey("preferences.preference_id"), nullable=False
+    )
+    start_location_id: Mapped[int] = mapped_column(
+        ForeignKey("location.location_id"), nullable=False
+    )
     end_location_id: Mapped[int] = mapped_column(ForeignKey("location.location_id"), nullable=False)
     eta: Mapped[int | None] = mapped_column(Integer)
     transportation: Mapped[str | None] = mapped_column(String(50))

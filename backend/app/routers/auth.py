@@ -4,6 +4,7 @@ Authentication endpoints.
 Register / login only - no OAuth/social login for the onboarding scope.
 Passwords are hashed with bcrypt before storage (Security Plan requirement).
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session

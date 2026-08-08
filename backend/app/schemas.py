@@ -1,4 +1,5 @@
 """Pydantic request/response schemas for the REST API."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,6 +47,7 @@ class RouteCompareRequest(BaseModel):
 
 class RouteOption(BaseModel):
     """One candidate route as shown on the Route comparison screen."""
+
     route_id: str
     label: str  # e.g. "Via Flinders Lane"
     distance_km: float

@@ -9,6 +9,7 @@ Security Plan requirements this satisfies:
 - "Users can only access their own data" -> get_current_user dependency below,
   used by any router that returns user-specific data (preferences, saved routes).
 """
+
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -17,9 +18,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from app import models
 from app.core.config import get_settings
 from app.database import get_db
-from app import models
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -59,10 +60,10 @@ def decode_access_token(token: str) -> str:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         user_id: str | None = payload.get("sub")
         if user_id is None:
-            raise credentials_exception
+            raise credentials_exception from None
         return user_id
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
 
 def get_current_user(

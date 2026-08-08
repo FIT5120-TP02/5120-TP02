@@ -8,6 +8,7 @@ Database settings deliberately mirror the repo-root db.py env vars
 DS1's ingestion scripts point at the same shared MySQL (AWS RDS) instance
 instead of running two different databases.
 """
+
 from functools import lru_cache
 
 from pydantic import Field

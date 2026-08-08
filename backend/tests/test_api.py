@@ -13,9 +13,7 @@ def test_register_login_and_read_own_preferences(client):
     )
     assert register.status_code == 201
 
-    login = client.post(
-        "/api/auth/login", data={"username": "freddy", "password": "commute123"}
-    )
+    login = client.post("/api/auth/login", data={"username": "freddy", "password": "commute123"})
     assert login.status_code == 200
     token = login.json()["access_token"]
 

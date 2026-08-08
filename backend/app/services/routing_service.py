@@ -12,6 +12,7 @@ Candidates evaluated for the free tier (see README for notes):
   - OpenRouteService: hosted free tier, rate-limited (2000 req/day).
   - GraphHopper: hosted free tier, rate-limited.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -92,20 +93,32 @@ def _mock_candidate_routes(
             label="Via Flinders Lane",
             distance_km=1.4,
             duration_min=18,
-            geometry=[[origin_lat, origin_lng], [mid_lat, mid_lng], [destination_lat, destination_lng]],
+            geometry=[
+                [origin_lat, origin_lng],
+                [mid_lat, mid_lng],
+                [destination_lat, destination_lng],
+            ],
         ),
         CandidateRoute(
             route_id="mock-swanston-street",
             label="Via Swanston Street",
             distance_km=0.9,
             duration_min=12,
-            geometry=[[origin_lat, origin_lng], [mid_lat + 0.0005, mid_lng], [destination_lat, destination_lng]],
+            geometry=[
+                [origin_lat, origin_lng],
+                [mid_lat + 0.0005, mid_lng],
+                [destination_lat, destination_lng],
+            ],
         ),
         CandidateRoute(
             route_id="mock-little-bourke-st",
             label="Via Little Bourke St",
             distance_km=1.6,
             duration_min=21,
-            geometry=[[origin_lat, origin_lng], [mid_lat - 0.0005, mid_lng], [destination_lat, destination_lng]],
+            geometry=[
+                [origin_lat, origin_lng],
+                [mid_lat - 0.0005, mid_lng],
+                [destination_lat, destination_lng],
+            ],
         ),
     ]

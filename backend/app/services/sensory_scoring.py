@@ -14,6 +14,7 @@ user into exactly what they're avoiding - NO DATA is a safety control, not
 a data gap." So this function must never guess a LOW/HIGH when the
 underlying data doesn't support it - it must return "NO DATA" instead.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -59,7 +60,8 @@ def score_route(
     usable_baselines = [
         baselines[sid]
         for sid in matched_sensor_ids
-        if sid in baselines and baselines[sid].observation_count >= settings.min_baseline_observations
+        if sid in baselines
+        and baselines[sid].observation_count >= settings.min_baseline_observations
     ]
     if not usable_baselines:
         return NO_DATA, None

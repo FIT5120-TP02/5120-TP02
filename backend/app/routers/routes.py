@@ -8,12 +8,13 @@ recommended route, a text notification when a corridor was avoided.
 Per the prototype ("notifying the user by text, not voice") notifications
 are plain text fields, not push/audio.
 """
+
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from app import schemas
-from app.services import sensory_scoring, routing_service
+from app.services import routing_service, sensory_scoring
 from app.services.sensory_scoring import SensorBaseline, SensorReading
 
 router = APIRouter(prefix="/api/routes", tags=["routes"])
@@ -28,10 +29,16 @@ def _fixture_sensor_data_for(route_id: str):
     below does not need to change.
     """
     fixtures = {
-        "mock-flinders-lane": (["sensor-67"], {"sensor-67": SensorReading("sensor-67", 40)},
-                                {"sensor-67": SensorBaseline("sensor-67", 60, 30)}),
-        "mock-swanston-street": (["sensor-68"], {"sensor-68": SensorReading("sensor-68", 210)},
-                                  {"sensor-68": SensorBaseline("sensor-68", 90, 30)}),
+        "mock-flinders-lane": (
+            ["sensor-67"],
+            {"sensor-67": SensorReading("sensor-67", 40)},
+            {"sensor-67": SensorBaseline("sensor-67", 60, 30)},
+        ),
+        "mock-swanston-street": (
+            ["sensor-68"],
+            {"sensor-68": SensorReading("sensor-68", 210)},
+            {"sensor-68": SensorBaseline("sensor-68", 90, 30)},
+        ),
         "mock-little-bourke-st": ([], {}, {}),
     }
     return fixtures.get(route_id, ([], {}, {}))
