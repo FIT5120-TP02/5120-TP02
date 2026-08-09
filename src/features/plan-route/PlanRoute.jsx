@@ -1,0 +1,118 @@
+import styles from './PlanRoute.module.css'
+import { useState, useEffect } from 'react'
+import { fetchRoutes } from './api/fetchRoutes'
+import { resolveLocation } from '../../lib/geocode'
+import RouteList from './components/RouteList'
+import RouteDetail from './components/RouteDetail'
+import RouteBreakdown from './components/RouteBreakdown'
+
+export default function PlanRoute({ initialDestination = '' }) {
+    const [from, setFrom] = useState('My Location — Melbourne CBD')
+    const [to, setTo] = useState(initialDestination)
+    const [routes, setRoutes] = useState([])
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState(null)
+    const [selectedRouteId, setSelectedRouteId] = useState(null)
+
+    const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
+
+    async function handleSearch(fromText, toText) {
+        setLoading(true)
+        setError(null)
+        try {
+            const [origin, destination] = await Promise.all([
+                resolveLocation(fromText),
+                resolveLocation(toText),
+            ])
+            const results = await fetchRoutes({ origin, destination })
+            setRoutes(results)
+            setSelectedRouteId(results[0]?.id ?? null)
+        } catch (err) {
+            setError(err.message || 'Something went wrong finding routes')
+            setRoutes([])
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (initialDestination) {
+            handleSearch(from, initialDestination)
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    return (
+        <>
+            <div className="HeaderContainer">
+                <div className="FeatureHeader">
+                    <div className="FeatureTitle">
+                        <h2>Plan Route</h2>
+                        <p>Sensory-safe paths</p>
+                    </div>
+                    <p>SenseWay /<span> Plan Route</span></p>
+                </div>
+            </div>
+            <div className={styles.planRouteContent}>
+                <div className={styles.planRouteSearchBar}>
+                    <p>Journey Details</p>
+                    <div className={styles.planRouteTitle}>
+                        <div className={styles.planRouteFrom}>
+                            <label htmlFor="from">From</label>
+                            <div className={styles.planRouteFromInput}>
+                                <span></span>
+                                <input
+                                    type="text"
+                                    id="from"
+                                    value={from}
+                                    onChange={(e) => setFrom(e.target.value)}
+                                    placeholder="Enter starting location"
+                                />
+                            </div>
+                        </div>
+                        <div className={styles.planRouteTo}>
+                            <label htmlFor="to">To</label>
+                            <div className={styles.planRouteToInput}>
+                                <span></span>
+                                <input
+                                    type="text"
+                                    id="to"
+                                    value={to}
+                                    onChange={(e) => setTo(e.target.value)}
+                                    placeholder="Enter destination"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" onClick={() => handleSearch(from, to)} disabled={!from || !to || loading}>
+                        {loading ? 'Searching...' : 'Find Routes'}
+                    </button>
+
+                    {error && <p className={styles.errorText}>{error}</p>}
+                </div>
+
+                {routes.length > 0 && (
+                    <div className={styles.planRouteResults}>
+                        <div className={styles.planRouteResultsLeft}>
+                            <RouteList routes={routes} selectedRouteId={selectedRouteId} onSelectRoute={setSelectedRouteId} />
+                        </div>
+                        <div className={styles.planRouteResultsRight}>
+                            <RouteDetail route={selectedRoute} />
+                            <RouteBreakdown route={selectedRoute} />
+                            {selectedRoute && (
+                                <a
+                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.navigationButton}
+                                >
+                                    Start Navigation on This Route →
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    )
+}
