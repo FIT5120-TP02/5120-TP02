@@ -1,0 +1,9 @@
+.mapWrapper {
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+}
+.map {
+    width: 100%;
+    height: 280px;
+}

@@ -1,29 +1,42 @@
 import styles from './PlanRoute.module.css'
 import { useState, useEffect } from 'react'
+import { MapContainer, TileLayer, Polyline } from 'react-leaflet'
 import { fetchRoutes } from './api/fetchRoutes'
 import { resolveLocation } from '../../lib/geocode'
+import { useLiveLocation } from '../../lib/liveLocation'
 import RouteList from './components/RouteList'
 import RouteDetail from './components/RouteDetail'
 import RouteBreakdown from './components/RouteBreakdown'
+import RouteMap from './components/RouteMap'
+
+const MY_LOCATION_DEFAULT = 'My Location – Melbourne CBD'
 
 export default function PlanRoute({ initialDestination = '' }) {
-    const [from, setFrom] = useState('My Location — Melbourne CBD')
+    const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()
+    const [from, setFrom] = useState(MY_LOCATION_DEFAULT)
     const [to, setTo] = useState(initialDestination)
     const [routes, setRoutes] = useState([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
     const [selectedRouteId, setSelectedRouteId] = useState(null)
+    const [resolvedOrigin, setResolvedOrigin] = useState(null)
+    const [resolvedDestination, setResolvedDestination] = useState(null)
 
     const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
-
+    console.log(userLocation)
     async function handleSearch(fromText, toText) {
         setLoading(true)
         setError(null)
+        console.log('handleSearch called, userLocation is:', userLocation)
         try {
-            const [origin, destination] = await Promise.all([
-                resolveLocation(fromText),
-                resolveLocation(toText),
-            ])
+            const origin = userLocation
+                ? { name: 'My Location', ...userLocation }
+                : await resolveLocation(fromText)
+            const destination = await resolveLocation(toText)
+
+            setResolvedOrigin(origin)
+            setResolvedDestination(destination)
+
             const results = await fetchRoutes({ origin, destination })
             setRoutes(results)
             setSelectedRouteId(results[0]?.id ?? null)
@@ -36,10 +49,10 @@ export default function PlanRoute({ initialDestination = '' }) {
     }
 
     useEffect(() => {
-        if (initialDestination) {
+        if (initialDestination && !locationLoading) {
             handleSearch(from, initialDestination)
         }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [locationLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <>
@@ -84,8 +97,8 @@ export default function PlanRoute({ initialDestination = '' }) {
                         </div>
                     </div>
 
-                    <button type="button" onClick={() => handleSearch(from, to)} disabled={!from || !to || loading}>
-                        {loading ? 'Searching...' : 'Find Routes'}
+                    <button type="button" onClick={() => handleSearch(from, to)} disabled={!from || !to || loading || locationLoading}>
+                        {locationLoading ? 'Getting your location...' : loading ? 'Searching...' : 'Find Routes'}
                     </button>
 
                     {error && <p className={styles.errorText}>{error}</p>}
@@ -98,10 +111,12 @@ export default function PlanRoute({ initialDestination = '' }) {
                         </div>
                         <div className={styles.planRouteResultsRight}>
                             <RouteDetail route={selectedRoute} />
+                            <RouteMap route={selectedRoute} />
                             <RouteBreakdown route={selectedRoute} />
+                            
                             {selectedRoute && (
                                 <a
-                                    href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`}
+                                    href={`https://www.google.com/maps/dir/?api=1&origin=${resolvedOrigin.lat},${resolvedOrigin.lng}&destination=${resolvedDestination.lat},${resolvedDestination.lng}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={styles.navigationButton}
