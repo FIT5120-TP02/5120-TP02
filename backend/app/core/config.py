@@ -37,12 +37,8 @@ class Settings(BaseSettings):
     # set directly, it's used as-is and the DB_* fields above are ignored.
     database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
 
-    # Auth - no usable default; must be supplied via env var (or set
-    # explicitly by tests, see tests/conftest.py). A default here would
-    # mean anyone who knows it could forge login tokens.
-    jwt_secret_key: str | None = None
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    # No auth/JWT settings - the product has no account/login system
+    # (team decision: no user accounts, per tutor's privacy guidance).
 
     # Routing service integration
     routing_provider: str = "mock"  # "mock" | "osrm" | "graphhopper" | "openrouteservice"
@@ -53,18 +49,20 @@ class Settings(BaseSettings):
     crowd_high_threshold_multiplier: float = 1.5
     min_baseline_observations: int = 5
 
+    # How close a `location` row (location_type='sensor') must be to any
+    # point on a candidate route's polyline to count as "on this route".
+    # 0.1km = 100m - tight enough that a sensor on a parallel street a
+    # block over shouldn't match. Tune once real route density is tested.
+    sensor_match_radius_km: float = 0.1
+
+    # `baseline.day_of_week`/`hourday` are matched against the current
+    # local time so LOW/HIGH reflects "for a Tuesday 5pm", not "overall".
+    # Melbourne CBD - only relevant if this deploys somewhere with a
+    # different server timezone (e.g. Render's UTC).
+    local_timezone: str = "Australia/Melbourne"
+
     # CORS
     frontend_origin: str = "http://localhost:5173"
-
-    @property
-    def resolved_jwt_secret_key(self) -> str:
-        if not self.jwt_secret_key:
-            raise RuntimeError(
-                "JWT_SECRET_KEY is not set. Generate one with:\n"
-                '  python -c "import secrets; print(secrets.token_hex(32))"\n'
-                "and set it as an env var - never commit a real secret to the repo."
-            )
-        return self.jwt_secret_key
 
     @property
     def database_url(self) -> str:

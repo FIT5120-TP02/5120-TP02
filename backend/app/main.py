@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.database import Base, engine
-from app.routers import auth, refuges, routes, users
+from app.routers import refuges, routes
 
 settings = get_settings()
 
@@ -43,8 +43,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(users.router)
 app.include_router(routes.router)
 app.include_router(refuges.router)
 

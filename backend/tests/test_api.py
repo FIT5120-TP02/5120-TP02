@@ -1,4 +1,15 @@
-"""Smoke tests for the REST API surface (integration-level, not unit)."""
+"""Smoke tests for the REST API surface (integration-level, not unit).
+
+No account/login tests here - the product has no auth system (team
+decision: removed for privacy, per tutor's guidance). Every endpoint is
+public/anonymous.
+
+Sensor-matching logic (LOW/HIGH/NO DATA over real data) is unit-tested
+separately in test_route_sensor_matching.py, since coupling it to the
+`mock` routing provider's fixed fixture geometry here would be brittle.
+"""
+
+from app.models import Location
 
 
 def test_health(client):
@@ -7,31 +18,7 @@ def test_health(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_register_login_and_read_own_preferences(client):
-    register = client.post(
-        "/api/auth/register", json={"username": "freddy", "password": "commute123"}
-    )
-    assert register.status_code == 201
-
-    login = client.post("/api/auth/login", data={"username": "freddy", "password": "commute123"})
-    assert login.status_code == 200
-    token = login.json()["access_token"]
-
-    headers = {"Authorization": f"Bearer {token}"}
-    me = client.get("/api/users/me", headers=headers)
-    assert me.status_code == 200
-    assert me.json()["username"] == "freddy"
-
-    prefs = client.get("/api/users/me/preferences", headers=headers)
-    assert prefs.status_code == 200
-
-
-def test_cannot_read_preferences_without_token(client):
-    response = client.get("/api/users/me/preferences")
-    assert response.status_code == 401
-
-
-def test_compare_routes_returns_low_high_and_no_data(client):
+def test_compare_routes_returns_three_routes_with_valid_statuses(client):
     response = client.post(
         "/api/routes/compare",
         json={
@@ -44,37 +31,33 @@ def test_compare_routes_returns_low_high_and_no_data(client):
     assert response.status_code == 200
     routes = response.json()["routes"]
     assert len(routes) == 3
-    statuses = {r["sensory_status"] for r in routes}
-    # Mirrors the Prototype slide: one LOW, one HIGH, one NO DATA
-    assert statuses == {"LOW", "HIGH", "NO DATA"}
+    assert all(r["sensory_status"] in {"LOW", "HIGH", "NO DATA"} for r in routes)
 
 
-def test_refuges_fixture_list(client):
+def test_refuges_returns_seeded_location_within_radius(client, db_session):
+    db_session.add(
+        Location(
+            location_id=101,
+            location_name="Test Library",
+            latitude=-37.8102,
+            longitude=144.9628,
+            location_type="refuge",
+            category="Library",
+        )
+    )
+    db_session.commit()
+
     response = client.get("/api/refuges", params={"lat": -37.8102, "lng": 144.9628})
     assert response.status_code == 200
-    body = response.json()
-    assert len(body["refuges"]) >= 1
-    assert all("category" in r for r in body["refuges"])
-
-
-def test_register_rejects_password_over_72_bytes(client):
-    response = client.post(
-        "/api/auth/register",
-        json={"username": "toolong", "password": "a" * 73},
-    )
-    assert response.status_code == 422
-
-
-def test_login_with_over_72_byte_password_is_unauthorized_not_500(client):
-    client.post("/api/auth/register", json={"username": "freddy2", "password": "commute123"})
-    response = client.post("/api/auth/login", data={"username": "freddy2", "password": "a" * 73})
-    assert response.status_code == 401
+    refuges = response.json()["refuges"]
+    matched = next(r for r in refuges if r["location_id"] == 101)
+    assert matched["category"] == "Library"
 
 
 def test_refuges_returns_empty_list_when_nothing_within_radius(client):
-    # Melbourne CBD fixtures are nowhere near this point (middle of the
-    # Pacific Ocean) - a tiny radius here must return [], not silently
-    # fall back to every fixture regardless of distance.
+    # Middle of the Pacific Ocean - guaranteed nothing seeded anywhere
+    # else in the test DB is within 1.5km of this, regardless of what
+    # other tests inserted.
     response = client.get("/api/refuges", params={"lat": 0.0, "lng": -160.0, "radius_km": 1.5})
     assert response.status_code == 200
     assert response.json()["refuges"] == []
