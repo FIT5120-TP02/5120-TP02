@@ -61,3 +61,29 @@ def test_refuges_returns_empty_list_when_nothing_within_radius(client):
     response = client.get("/api/refuges", params={"lat": 0.0, "lng": -160.0, "radius_km": 1.5})
     assert response.status_code == 200
     assert response.json()["refuges"] == []
+
+
+def test_refuges_rejects_zero_walking_speed(client):
+    # walking_speed_kmh=0 would divide-by-zero computing eta_min - must be
+    # rejected by request validation, not reach the handler at all.
+    response = client.get(
+        "/api/refuges",
+        params={"lat": -37.8102, "lng": 144.9628, "walking_speed_kmh": 0},
+    )
+    assert response.status_code == 422
+
+
+def test_refuges_rejects_negative_radius(client):
+    response = client.get(
+        "/api/refuges",
+        params={"lat": -37.8102, "lng": 144.9628, "radius_km": -1},
+    )
+    assert response.status_code == 422
+
+
+def test_refuges_rejects_excessive_radius(client):
+    response = client.get(
+        "/api/refuges",
+        params={"lat": -37.8102, "lng": 144.9628, "radius_km": 999},
+    )
+    assert response.status_code == 422

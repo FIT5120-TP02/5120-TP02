@@ -23,8 +23,11 @@ router = APIRouter(prefix="/api/refuges", tags=["refuges"])
 def list_refuges(
     lat: float = Query(..., description="User's current latitude"),
     lng: float = Query(..., description="User's current longitude"),
-    radius_km: float = Query(1.5, description="Search radius"),
-    walking_speed_kmh: float = Query(4.5),
+    radius_km: float = Query(1.5, ge=0, le=10, description="Search radius (km), 0-10"),
+    # gt=0 - walking_speed_kmh=0 would divide-by-zero when computing
+    # eta_min below. le=15 is a sanity bound (well above any real walking
+    # pace) so a typo doesn't produce a nonsense ETA.
+    walking_speed_kmh: float = Query(4.5, gt=0, le=15),
     db: Session = Depends(get_db),
 ):
     rows = db.query(models.Location).filter(models.Location.location_type == "refuge").all()

@@ -1,120 +1,145 @@
 """
-Tests for the real sensor-matching logic in app/routers/routes.py
-(_match_sensors_to_route, _real_sensor_data_for) - the code that replaced
-the old fixture placeholder once the real `location`/`baseline`/
-`pedestrian_count_minute` schema was confirmed against the live DB.
+Tests for the SQLAlchemy glue in app/routers/routes.py
+(_sensor_locations, _latest_readings, _baselines_for_slot) that feeds
+DS3's approved sensory_scoring functions (match_sensors_to_route,
+score_route) with real data from the shared DB schema.
 
-These call the helpers directly rather than going through
-POST /api/routes/compare, so they don't depend on the mock routing
-provider's fixed fixture geometry - full control over coordinates here.
+DS3's own matching/scoring algorithms are tested directly in
+test_sensory_scoring.py (ported from their test suite) - these tests
+only cover the glue: does the right SQLAlchemy data turn into the right
+SensorLocation/SensorReading/SensorBaseline objects.
 """
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
-from app.core.config import get_settings
 from app.models import Baseline, Location, PedestrianCountMinute
-from app.routers.routes import _match_sensors_to_route, _real_sensor_data_for
+from app.routers.routes import _baselines_for_slot, _latest_readings, _sensor_locations
+from app.services.sensory_scoring import match_sensors_to_route
 
 
-def _now_local():
-    return datetime.now(ZoneInfo(get_settings().local_timezone))
-
-
-def test_match_sensors_to_route_includes_within_radius_excludes_outside(db_session):
+def test_sensor_locations_only_returns_sensor_type_rows(db_session):
     db_session.add_all(
         [
             Location(
-                location_id=8001,
-                location_name="On route",
-                latitude=-37.8100,
-                longitude=144.9600,
+                location_id=9001,
+                location_name="A sensor",
+                latitude=-37.81,
+                longitude=144.96,
                 location_type="sensor",
             ),
             Location(
-                location_id=8002,
-                location_name="Far from route",
-                latitude=-37.8200,  # ~1.1km away - outside the 0.1km default radius
-                longitude=144.9600,
-                location_type="sensor",
+                location_id=9002,
+                location_name="A refuge",
+                latitude=-37.81,
+                longitude=144.96,
+                location_type="refuge",
+                category="Park",
             ),
         ]
     )
     db_session.commit()
 
-    geometry = [[-37.8100, 144.9600], [-37.8095, 144.9605]]
-    matched = _match_sensors_to_route(db_session, geometry)
+    sensors = _sensor_locations(db_session)
+    sensor_ids = {s.sensor_id for s in sensors}
 
-    matched_ids = {s.location_id for s in matched}
-    assert 8001 in matched_ids
-    assert 8002 not in matched_ids
+    assert "9001" in sensor_ids
+    assert "9002" not in sensor_ids
 
 
-def test_real_sensor_data_for_attaches_reading_and_baseline(db_session):
-    now = _now_local()
-    sensor = Location(
-        location_id=8101,
-        location_name="Test sensor",
-        latitude=-37.81,
-        longitude=144.96,
-        location_type="sensor",
+def test_latest_readings_picks_the_most_recent_row_per_location(db_session):
+    now = datetime(2026, 8, 9, 3, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+    db_session.add_all(
+        [
+            PedestrianCountMinute(
+                location_id=9101,
+                sensing_datetime=now - timedelta(minutes=10),
+                sensing_date=(now - timedelta(minutes=10)).date(),
+                sensing_time=(now - timedelta(minutes=10)).time(),
+                total_of_directions=10,
+            ),
+            PedestrianCountMinute(
+                location_id=9101,
+                sensing_datetime=now,
+                sensing_date=now.date(),
+                sensing_time=now.time(),
+                total_of_directions=99,  # this is the most recent - should win
+            ),
+        ]
     )
-    db_session.add(sensor)
-    db_session.add(
-        Baseline(
-            location_id=8101,
-            day_of_week=now.weekday(),
-            hourday=now.hour,
-            average_count=60,
-            median_count=60,
-            observation_count=30,
-            recomputed_at=now.replace(tzinfo=None, microsecond=0),
-        )
-    )
+    db_session.commit()
+
+    readings = _latest_readings(db_session, [9101])
+
+    assert readings["9101"].current_count == 99
+    assert readings["9101"].observed_at == now
+
+
+def test_latest_readings_skips_rows_with_no_count(db_session):
+    now = datetime(2026, 8, 9, 3, 0, tzinfo=timezone.utc).replace(tzinfo=None)
     db_session.add(
         PedestrianCountMinute(
-            location_id=8101,
-            sensing_datetime=now.replace(tzinfo=None, microsecond=0),
+            location_id=9102,
+            sensing_datetime=now,
             sensing_date=now.date(),
-            sensing_time=now.time().replace(microsecond=0),
-            total_of_directions=40,
+            sensing_time=now.time(),
+            total_of_directions=None,
         )
     )
     db_session.commit()
 
-    matched_ids, readings, baselines = _real_sensor_data_for(db_session, [sensor])
+    readings = _latest_readings(db_session, [9102])
 
-    assert matched_ids == ["8101"]
-    assert readings["8101"].current_count == 40
-    assert baselines["8101"].median_count == 60
-    assert baselines["8101"].observation_count == 30
+    assert "9102" not in readings
 
 
-def test_real_sensor_data_for_skips_sensor_with_no_reading(db_session):
-    now = _now_local()
-    sensor = Location(
-        location_id=8102,
-        location_name="No reading sensor",
-        latitude=-37.81,
-        longitude=144.96,
-        location_type="sensor",
+def test_baselines_for_slot_filters_by_day_and_hour(db_session):
+    db_session.add_all(
+        [
+            Baseline(
+                location_id=9201,
+                day_of_week=1,
+                hourday=14,
+                average_count=50,
+                median_count=50,
+                observation_count=20,
+                recomputed_at=datetime(2026, 8, 1, 0, 0),
+            ),
+            Baseline(
+                location_id=9201,
+                day_of_week=1,
+                hourday=15,  # different hour - must not match
+                average_count=999,
+                median_count=999,
+                observation_count=20,
+                recomputed_at=datetime(2026, 8, 1, 0, 0),
+            ),
+        ]
     )
-    db_session.add(sensor)
+    db_session.commit()
+
+    baselines = _baselines_for_slot(db_session, [9201], day_of_week=1, hourday=14)
+
+    assert baselines["9201"].median_count == 50
+
+
+def test_match_sensors_to_route_still_wired_through_correctly(db_session):
+    # Sanity check that the glue passes real SensorLocation objects into
+    # DS3's match_sensors_to_route() correctly end-to-end (not testing
+    # the matching algorithm itself - that's DS3's, tested separately).
     db_session.add(
-        Baseline(
-            location_id=8102,
-            day_of_week=now.weekday(),
-            hourday=now.hour,
-            average_count=60,
-            median_count=60,
-            observation_count=30,
-            recomputed_at=now.replace(tzinfo=None, microsecond=0),
+        Location(
+            location_id=9301,
+            location_name="On the route",
+            latitude=-37.8100,
+            longitude=144.9600,
+            location_type="sensor",
         )
     )
     db_session.commit()
 
-    matched_ids, readings, baselines = _real_sensor_data_for(db_session, [sensor])
+    sensors = _sensor_locations(db_session)
+    matched = match_sensors_to_route(
+        [[-37.8100, 144.9600], [-37.8101, 144.9601]], sensors, buffer_radius_m=120
+    )
 
-    assert matched_ids == ["8102"]
-    assert "8102" not in readings
-    assert "8102" in baselines
+    assert "9301" in matched

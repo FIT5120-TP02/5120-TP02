@@ -31,6 +31,24 @@ uvicorn app.main:app --reload
 
 Interactive docs: http://localhost:8000/docs
 
+## Before deploying (Render or anywhere else)
+
+`.env.example` intentionally defaults to `ROUTING_PROVIDER=mock` so local
+dev/tests work with zero setup - copying it as-is to a real deployment
+will NOT activate real routing, it'll silently keep serving fixture
+routes (the API still returns 200s, so this is easy to miss). Before
+deploying, set these explicitly in the platform's environment variables
+(not just in a local `.env` - a deployed instance never reads that file):
+
+- `ROUTING_PROVIDER=openrouteservice`
+- `ROUTING_SERVICE_API_KEY=<your key>`
+- `DB_PASSWORD=<real password>`
+- `FRONTEND_ORIGIN=<the deployed frontend's real URL>`
+
+The app logs a warning at startup if `ROUTING_PROVIDER` is still `mock`
+(see `app/main.py::lifespan`) - check the platform's startup logs after
+deploying to confirm it didn't fire.
+
 ## Run tests
 
 ```bash
@@ -79,6 +97,13 @@ The repo already has `ds1-ingestion/`, `ds2-baseline/`, and a root
    backend/app/routers/users.py backend/app/core/security.py` to remove
    them; they're already unwired from `app/main.py` so leaving them in
    place is harmless but messy.
+5. **DS3's scoring module (`ds3-sensory-scoring/`) is a sibling folder to
+   `backend/`**, not part of it - `backend/app/services/sensory_scoring.py`
+   is a copy of `ds3-sensory-scoring/sensory_scoring.py` (PR #4), kept in
+   sync manually rather than imported across the two folders, since
+   `backend/`'s FastAPI app and `ds3-sensory-scoring/`'s standalone
+   script have different dependency/packaging needs. If DS3 updates their
+   version, that copy needs updating here too - not automatic.
 
 CI workflow and PR template already live at the repo root
 (`.github/workflows/ci.yml`, `.github/PULL_REQUEST_TEMPLATE.md`) - not
@@ -96,24 +121,29 @@ duplicated under `backend/` in this drop.
 - **Refuge locations — done.** `GET /api/refuges` queries real
   `location` rows (`location_type='refuge'`), with real lat/lng distance
   filtering. No fixture fallback.
-- **Sensor data (route LOW/HIGH/NO DATA) — done, one assumption to
-  verify.** `app/routers/routes.py` matches `location_type='sensor'` rows
-  to a candidate route by proximity (`SENSOR_MATCH_RADIUS_KM`, default
-  100m) to any point on its polyline, pulls the latest
-  `pedestrian_count_minute` row as the live reading, and the matching
-  `baseline` row (by `day_of_week`/`hourday` for the current local time)
-  as the baseline. **Unverified:** `baseline.day_of_week` is confirmed to
-  range 0-6, but not confirmed whether 0 = Monday or Sunday — this code
-  assumes Python's `datetime.weekday()` convention (Monday=0). If a route
-  scores LOW/HIGH at an obviously wrong time of day, this is the first
-  thing to check (see the comment in
-  `app/routers/routes.py::_real_sensor_data_for`).
-- **`CROWD_HIGH_THRESHOLD_MULTIPLIER`** is a placeholder (1.5x baseline
-  median). Per the deck, DS2 determines this empirically — update the env
-  var once they have a number.
-- **`SENSOR_MATCH_RADIUS_KM`** (default 0.1km/100m) hasn't been tested
-  against real route density in the CBD — tune if too many/few sensors
-  match per route.
+- **Sensor data (route LOW/HIGH/NO DATA) — done, using DS3's approved
+  implementation.** `app/services/sensory_scoring.py` is ported verbatim
+  from DS3's `ds3-sensory-scoring/sensory_scoring.py` (PR #4), not a
+  backend-written placeholder. `app/routers/routes.py` only does the
+  SQLAlchemy glue (fetching sensor locations, the latest
+  `pedestrian_count_minute` row per sensor, and the matching `baseline`
+  row) and hands the data to DS3's unmodified `match_sensors_to_route()`
+  and `score_route()`. This gets DS3's staleness check (readings older
+  than `live_max_age_minutes`, default 30, are treated as NO DATA),
+  absolute HIGH threshold (not just relative-to-baseline, so a quiet
+  corridor's baseline noise can't trigger a false HIGH), and confirmed
+  Melbourne baseline-slot handling (`melbourne_baseline_slot()` uses
+  `datetime.weekday()` - Monday=0 - matching how DS2 actually populated
+  `baseline.day_of_week`, verified against real `pedestrian_count_hour`
+  rows, not assumed).
+- **`ScoringConfig` thresholds are currently hardcoded defaults**
+  (`buffer_radius_m=120`, `relative_threshold=1.5`,
+  `absolute_threshold=500`, etc. - see `sensory_scoring.ScoringConfig`),
+  not loaded from the shared DB's `config` table yet. DS3's own
+  `load_config()` does this via a raw pymysql connection; porting that to
+  a SQLAlchemy equivalent for `app/routers/routes.py` is a small
+  follow-up once `config`'s schema is confirmed (see the TODO in
+  `compare_routes()`).
 - **Deployment platform + scheduled jobs** (daily batch, 15-min poll) are
   out of scope for this drop — this README/API is the piece to plug into
   whatever platform gets chosen next.

@@ -1,5 +1,7 @@
-"""Shared geo helper - haversine distance, used by both refuges.py (distance
-to a refuge) and routes.py (matching sensors to a route's polyline)."""
+"""Shared geo helper - haversine distance, used by refuges.py (distance to
+a refuge). Route<->sensor proximity matching now uses DS3's own
+point-to-segment implementation in app/services/sensory_scoring.py
+instead of a second, separate one here."""
 
 from __future__ import annotations
 

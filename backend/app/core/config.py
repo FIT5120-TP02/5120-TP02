@@ -45,21 +45,18 @@ class Settings(BaseSettings):
     routing_service_url: str = "http://localhost:5001"
     routing_service_api_key: str = ""
 
-    # Sensory scoring thresholds (DS2/DS3 own the values; these are fallbacks)
-    crowd_high_threshold_multiplier: float = 1.5
-    min_baseline_observations: int = 5
+    # No sensory-scoring threshold settings here - DS3's
+    # app/services/sensory_scoring.py::ScoringConfig owns the buffer
+    # radius, HIGH thresholds, minimum observations, and staleness window,
+    # with its own sensible defaults. It's designed to load overrides from
+    # the shared DB's `config` table (see ScoringConfig/load_config) rather
+    # than from this app's env vars, so DS2 can tune it without a
+    # redeploy.
 
-    # How close a `location` row (location_type='sensor') must be to any
-    # point on a candidate route's polyline to count as "on this route".
-    # 0.1km = 100m - tight enough that a sensor on a parallel street a
-    # block over shouldn't match. Tune once real route density is tested.
-    sensor_match_radius_km: float = 0.1
-
-    # `baseline.day_of_week`/`hourday` are matched against the current
-    # local time so LOW/HIGH reflects "for a Tuesday 5pm", not "overall".
-    # Melbourne CBD - only relevant if this deploys somewhere with a
-    # different server timezone (e.g. Render's UTC).
-    local_timezone: str = "Australia/Melbourne"
+    # No local-timezone setting here either - DS3's sensory_scoring.py
+    # hardcodes Australia/Melbourne for baseline day/hour matching, since
+    # that's a property of the data (Melbourne CBD sensors), not something
+    # that should vary by deployment.
 
     # CORS
     frontend_origin: str = "http://localhost:5173"
