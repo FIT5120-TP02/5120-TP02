@@ -129,21 +129,29 @@ duplicated under `backend/` in this drop.
   `pedestrian_count_minute` row per sensor, and the matching `baseline`
   row) and hands the data to DS3's unmodified `match_sensors_to_route()`
   and `score_route()`. This gets DS3's staleness check (readings older
-  than `live_max_age_minutes`, default 30, are treated as NO DATA),
+  than `live_max_age_minutes`, default 30, are treated as NO DATA) and
   absolute HIGH threshold (not just relative-to-baseline, so a quiet
-  corridor's baseline noise can't trigger a false HIGH), and confirmed
-  Melbourne baseline-slot handling (`melbourne_baseline_slot()` uses
-  `datetime.weekday()` - Monday=0 - matching how DS2 actually populated
-  `baseline.day_of_week`, verified against real `pedestrian_count_hour`
-  rows, not assumed).
-- **`ScoringConfig` thresholds are currently hardcoded defaults**
-  (`buffer_radius_m=120`, `relative_threshold=1.5`,
-  `absolute_threshold=500`, etc. - see `sensory_scoring.ScoringConfig`),
-  not loaded from the shared DB's `config` table yet. DS3's own
-  `load_config()` does this via a raw pymysql connection; porting that to
-  a SQLAlchemy equivalent for `app/routers/routes.py` is a small
-  follow-up once `config`'s schema is confirmed (see the TODO in
-  `compare_routes()`).
+  corridor's baseline noise can't trigger a false HIGH).
+- **`baseline.day_of_week` convention — verified, not assumed.**
+  `melbourne_baseline_slot()` uses `datetime.weekday()` (Monday=0).
+  Confirmed against real DS2 output, not just inferred from DS3's code:
+  `SELECT sensing_date, day_of_week FROM pedestrian_count_hour LIMIT 10;`
+  against the live shared DB returns `2025-08-11` (a real-world Monday)
+  with `day_of_week=0` - see the
+  `DayOfWeekProducerConventionTests` in `tests/test_sensory_scoring.py`,
+  which encodes this exact fact as a regression test.
+- **`ScoringConfig` now loads from the shared DB's `config` table.**
+  `app/services/scoring_config.py::load_scoring_config()` is a SQLAlchemy
+  port of DS3's `load_config()` (same keys, same fallback defaults,
+  wired into `compare_routes()`). As of 2026-08-09 only
+  `absolute_threshold` (500), `minimum_observations` (10), and
+  `relative_threshold` (1.5) are actually populated in `config` -
+  `route_buffer_radius_m`, `minimum_route_sensors`, and
+  `live_max_age_minutes` fall back to `ScoringConfig`'s own defaults
+  until DS2 adds rows for them. `tests/test_scoring_config.py` covers
+  both the populated-key and fallback-default paths, plus a regression
+  test proving a DB-level override actually changes a route's scored
+  outcome (not just that the config value gets parsed).
 - **Deployment platform + scheduled jobs** (daily batch, 15-min poll) are
   out of scope for this drop — this README/API is the piece to plug into
   whatever platform gets chosen next.

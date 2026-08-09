@@ -27,8 +27,8 @@ from app import schemas
 from app.database import get_db
 from app.models import Baseline, Location, PedestrianCountMinute
 from app.services import routing_service, sensory_scoring
+from app.services.scoring_config import load_scoring_config
 from app.services.sensory_scoring import (
-    ScoringConfig,
     SensorBaseline,
     SensorLocation,
     SensorReading,
@@ -112,12 +112,7 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
         payload.origin_lat, payload.origin_lng, payload.destination_lat, payload.destination_lng
     )
 
-    # TODO: load from the `config` table instead of hardcoded defaults,
-    # once its schema is confirmed - see sensory_scoring.load_config() for
-    # the pattern DS3 already wrote for this (it takes a raw pymysql
-    # connection; this call site has a SQLAlchemy Session instead, so it
-    # needs a small adapter, not a straight call).
-    cfg = ScoringConfig()
+    cfg = load_scoring_config(db)
     now = datetime.now(timezone.utc)
     day_of_week, hourday = melbourne_baseline_slot(now)
     sensors = _sensor_locations(db)

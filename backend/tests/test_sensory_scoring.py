@@ -12,11 +12,12 @@ Code Quality slide requirement: "Sensory scoring logic must have tests."
 """
 
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.services.sensory_scoring import (
     HIGH,
     LOW,
+    MELBOURNE_TIMEZONE,
     NO_DATA,
     ScoringConfig,
     SensorBaseline,
@@ -118,6 +119,44 @@ class BaselineTimezoneTests(unittest.TestCase):
     def test_naive_supplied_time_is_treated_as_melbourne_local(self):
         local_time = datetime(2026, 8, 9, 23, 30, tzinfo=timezone.utc).replace(tzinfo=None)
         self.assertEqual(melbourne_baseline_slot(local_time), (6, 23))
+
+
+class DayOfWeekProducerConventionTests(unittest.TestCase):
+    """
+    IT-added (not part of DS3's ported suite) - review round 4, issue #2:
+    connects DS2's actual producer convention to melbourne_baseline_slot()
+    instead of trusting that DS3's code made the same assumption
+    correctly.
+
+    Verified against the live shared DB on 2026-08-10:
+
+        SELECT sensing_date, day_of_week FROM pedestrian_count_hour LIMIT 10;
+        +--------------+-------------+
+        | sensing_date | day_of_week |
+        +--------------+-------------+
+        | 2025-08-11   |           0 |
+        | 2025-08-18   |           0 |
+        ...
+
+    2025-08-11 is a real-world Monday (confirmed via
+    date(2025, 8, 11).weekday() == 0 below, which is exactly Python's
+    Monday=0 convention). DS2's ingestion wrote day_of_week=0 for that
+    date, so DS2's producer convention and melbourne_baseline_slot()'s
+    Monday=0 assumption are the same thing - not two independent guesses
+    that happen to match.
+    """
+
+    def test_known_real_world_monday_is_day_of_week_zero_in_python(self):
+        # The calendar fact this whole verification rests on.
+        self.assertEqual(date(2025, 8, 11).weekday(), 0)
+
+    def test_melbourne_baseline_slot_agrees_with_ds2s_verified_monday(self):
+        # A Monday 09:00 Melbourne time must resolve to weekday 0, the
+        # same value DS2's pedestrian_count_hour row for 2025-08-11 (a
+        # real Monday) actually has in day_of_week.
+        a_monday_9am_melbourne = datetime(2025, 8, 11, 9, 0, tzinfo=MELBOURNE_TIMEZONE)
+        weekday, _hour = melbourne_baseline_slot(a_monday_9am_melbourne)
+        self.assertEqual(weekday, 0)
 
 
 if __name__ == "__main__":

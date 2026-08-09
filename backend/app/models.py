@@ -87,6 +87,23 @@ class PedestrianCountMinute(Base):
     total_of_directions: Mapped[int | None] = mapped_column(Integer)
 
 
+class Config(Base):
+    """
+    Key/value tuning table DS2 writes to (route_buffer_radius_m,
+    relative_threshold, absolute_threshold, minimum_observations,
+    minimum_route_sensors, live_max_age_minutes - only a subset is
+    populated at any given time; missing keys fall back to
+    ScoringConfig's own defaults, same as DS3's own load_config()).
+    """
+
+    __tablename__ = "config"
+
+    config_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255))
+
+
 class Route(Base):
     __tablename__ = "route"
 
