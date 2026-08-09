@@ -37,34 +37,29 @@ class Settings(BaseSettings):
     # set directly, it's used as-is and the DB_* fields above are ignored.
     database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
 
-    # Auth - no usable default; must be supplied via env var (or set
-    # explicitly by tests, see tests/conftest.py). A default here would
-    # mean anyone who knows it could forge login tokens.
-    jwt_secret_key: str | None = None
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    # No auth/JWT settings - the product has no account/login system
+    # (team decision: no user accounts, per tutor's privacy guidance).
 
     # Routing service integration
     routing_provider: str = "mock"  # "mock" | "osrm" | "graphhopper" | "openrouteservice"
     routing_service_url: str = "http://localhost:5001"
     routing_service_api_key: str = ""
 
-    # Sensory scoring thresholds (DS2/DS3 own the values; these are fallbacks)
-    crowd_high_threshold_multiplier: float = 1.5
-    min_baseline_observations: int = 5
+    # No sensory-scoring threshold settings here - DS3's
+    # app/services/sensory_scoring.py::ScoringConfig owns the buffer
+    # radius, HIGH thresholds, minimum observations, and staleness window,
+    # with its own sensible defaults. It's designed to load overrides from
+    # the shared DB's `config` table (see ScoringConfig/load_config) rather
+    # than from this app's env vars, so DS2 can tune it without a
+    # redeploy.
+
+    # No local-timezone setting here either - DS3's sensory_scoring.py
+    # hardcodes Australia/Melbourne for baseline day/hour matching, since
+    # that's a property of the data (Melbourne CBD sensors), not something
+    # that should vary by deployment.
 
     # CORS
     frontend_origin: str = "http://localhost:5173"
-
-    @property
-    def resolved_jwt_secret_key(self) -> str:
-        if not self.jwt_secret_key:
-            raise RuntimeError(
-                "JWT_SECRET_KEY is not set. Generate one with:\n"
-                '  python -c "import secrets; print(secrets.token_hex(32))"\n'
-                "and set it as an env var - never commit a real secret to the repo."
-            )
-        return self.jwt_secret_key
 
     @property
     def database_url(self) -> str:

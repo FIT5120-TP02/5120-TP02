@@ -1,92 +1,284 @@
-"""
-Sensory scoring: assigns LOW / HIGH / NO DATA to a candidate route.
+"""DS3 sensory scoring using the tables produced by DS1 and DS2.
 
-Ownership note (see Build Roles slide): DS3 owns this logic long-term -
-matching sensors to a route by buffer radius, comparing current vs
-baseline, and the NO DATA rules. This module is IT's placeholder so the
-REST API has a real, working implementation to call and test against
-from day one. When DS3's version lands, swap the body of
-`score_route()` for their function and keep the signature so the
-routers/routes.py caller doesn't need to change.
+Ported verbatim from DS3's approved implementation (PR #4,
+`ds3-sensory-scoring/sensory_scoring.py` on `jliu0410`'s branch) per
+review round 3, issue #1 - this replaces IT's earlier placeholder, which
+was missing stale-reading protection, the absolute HIGH threshold, and
+correct Melbourne baseline-slot handling.
 
-Safety note from the Security Plan: "A false LOW sends a sensory-sensitive
-user into exactly what they're avoiding - NO DATA is a safety control, not
-a data gap." So this function must never guess a LOW/HIGH when the
-underlying data doesn't support it - it must return "NO DATA" instead.
-This includes never comparing a reading from one sensor against a
-baseline from a different sensor - only sensors with BOTH a usable
-baseline and a live reading are compared, on the intersection of the two.
+`load_config`/`score_route_from_database`/`main` below use a raw pymysql
+connection (matching db.py's style) and are DS3's own entry points for
+batch/script use - the FastAPI integration in app/routers/routes.py uses
+the pure functions (`match_sensors_to_route`, `score_route`,
+`melbourne_baseline_slot`, `ScoringConfig`) with data fetched via
+SQLAlchemy instead, since the app's DB session is already a SQLAlchemy
+Session, not a raw pymysql connection - see routes.py for that glue.
 """
 
 from __future__ import annotations
 
+import math
+import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-
-from app.core.config import get_settings
+from datetime import datetime, timedelta, timezone
+from itertools import pairwise
+from zoneinfo import ZoneInfo
 
 LOW = "LOW"
 HIGH = "HIGH"
 NO_DATA = "NO DATA"
 
+MELBOURNE_TIMEZONE = ZoneInfo("Australia/Melbourne")
+# DS1 documents sensing_datetime as a UTC value (for example, +00:00).
+# MySQL DATETIME drops the offset, so naive values read back from the shared
+# database must be restored as UTC before freshness comparisons.
+DATABASE_TIMEZONE = timezone.utc
 
-@dataclass
+
+@dataclass(frozen=True)
+class SensorLocation:
+    sensor_id: str
+    latitude: float
+    longitude: float
+
+
+@dataclass(frozen=True)
 class SensorReading:
     sensor_id: str
     current_count: float
+    observed_at: datetime | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SensorBaseline:
     sensor_id: str
     median_count: float
     observation_count: int
 
 
+@dataclass(frozen=True)
+class ScoringConfig:
+    buffer_radius_m: float = 120.0
+    relative_threshold: float = 1.5
+    absolute_threshold: float = 500.0
+    minimum_observations: int = 10
+    minimum_sensors: int = 1
+    live_max_age_minutes: int = 30
+
+
+def _point_segment_distance_m(point, start, end):
+    """Approximate point-to-segment distance for short CBD routes."""
+    reference_lat = math.radians((point[0] + start[0] + end[0]) / 3)
+    metres_per_degree_lat = 111_320.0
+    metres_per_degree_lng = metres_per_degree_lat * math.cos(reference_lat)
+    px = (point[1] - start[1]) * metres_per_degree_lng
+    py = (point[0] - start[0]) * metres_per_degree_lat
+    ex = (end[1] - start[1]) * metres_per_degree_lng
+    ey = (end[0] - start[0]) * metres_per_degree_lat
+    length_squared = ex * ex + ey * ey
+    if length_squared == 0:
+        return math.hypot(px, py)
+    projection = max(0.0, min(1.0, (px * ex + py * ey) / length_squared))
+    return math.hypot(px - projection * ex, py - projection * ey)
+
+
+def match_sensors_to_route(
+    geometry: Sequence[Sequence[float]],
+    sensors: Iterable[SensorLocation],
+    buffer_radius_m: float = 120.0,
+) -> list[str]:
+    """Match sensors within the buffer of a ``[[lat, lng], ...]`` route."""
+    if buffer_radius_m < 0:
+        raise ValueError("buffer_radius_m cannot be negative")
+    if len(geometry) < 2:
+        return []
+    points = [(float(point[0]), float(point[1])) for point in geometry]
+    matched = []
+    seen = set()
+    for sensor in sensors:
+        distance = min(
+            _point_segment_distance_m(
+                (sensor.latitude, sensor.longitude), segment_start, segment_end
+            )
+            for segment_start, segment_end in pairwise(points)
+        )
+        if distance <= buffer_radius_m and sensor.sensor_id not in seen:
+            matched.append(sensor.sensor_id)
+            seen.add(sensor.sensor_id)
+    return matched
+
+
+def _is_stale(observed_at: datetime | None, now: datetime, max_age_minutes: int) -> bool:
+    if observed_at is None:
+        return True
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=DATABASE_TIMEZONE)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
+    return now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc) > timedelta(
+        minutes=max_age_minutes
+    )
+
+
+def melbourne_baseline_slot(when: datetime | None = None) -> tuple[int, int]:
+    """Return DS2's ``(weekday, hour)`` slot in Melbourne local time.
+
+    A supplied naive datetime is interpreted as Melbourne local time. An aware
+    datetime is converted to Melbourne before selecting the baseline slot.
+    """
+    value = when or datetime.now(MELBOURNE_TIMEZONE)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=MELBOURNE_TIMEZONE)
+    else:
+        value = value.astimezone(MELBOURNE_TIMEZONE)
+    return value.weekday(), value.hour
+
+
 def score_route(
-    matched_sensor_ids: list[str],
-    readings: dict[str, SensorReading],
-    baselines: dict[str, SensorBaseline],
+    matched_sensor_ids: Sequence[str],
+    readings: Mapping[str, SensorReading],
+    baselines: Mapping[str, SensorBaseline],
+    config: ScoringConfig | None = None,
+    now: datetime | None = None,
 ) -> tuple[str, str | None]:
-    """
-    Returns (status, notification_text).
+    """Return ``(LOW|HIGH|NO DATA, notification)`` for one route.
 
-    NO DATA rules (per DS3's ownership on the Build Roles slide):
-      1. Too few sensors matched to the route buffer.
-      2. Too few baseline observations for the matched sensors.
-      3. No live reading available for the matched sensors right now.
-      4. No sensor has BOTH a usable baseline and a live reading - a
-         reading for sensor A must never be compared against sensor B's
-         baseline just because both individually looked "usable".
+    LOW is returned only when every matched sensor has a fresh reading and a
+    reliable baseline. HIGH requires both DS2's absolute and relative limits.
     """
-    settings = get_settings()
-
-    if len(matched_sensor_ids) == 0:
+    cfg = config or ScoringConfig()
+    check_time = now or datetime.now(timezone.utc)
+    sensor_ids = list(dict.fromkeys(str(sensor_id) for sensor_id in matched_sensor_ids))
+    if len(sensor_ids) < cfg.minimum_sensors:
         return NO_DATA, None
-
-    # Only sensors with both a sufficiently-observed baseline AND a live
-    # reading right now are usable - the intersection, not two independent
-    # lists that might not actually refer to the same sensors.
-    usable_sensor_ids = [
-        sid
-        for sid in matched_sensor_ids
-        if sid in baselines
-        and baselines[sid].observation_count >= settings.min_baseline_observations
-        and sid in readings
+    for sensor_id in sensor_ids:
+        reading = readings.get(sensor_id)
+        baseline = baselines.get(sensor_id)
+        if reading is None or baseline is None:
+            return NO_DATA, None
+        if reading.current_count < 0:
+            return NO_DATA, None
+        if baseline.median_count <= 0:
+            return NO_DATA, None
+        if baseline.observation_count < cfg.minimum_observations:
+            return NO_DATA, None
+        if _is_stale(reading.observed_at, check_time, cfg.live_max_age_minutes):
+            return NO_DATA, None
+    high_sensor_ids = [
+        sensor_id
+        for sensor_id in sensor_ids
+        if readings[sensor_id].current_count >= cfg.absolute_threshold
+        and readings[sensor_id].current_count
+        >= baselines[sensor_id].median_count * cfg.relative_threshold
     ]
-    if not usable_sensor_ids:
-        return NO_DATA, None
-
-    avg_current = sum(readings[sid].current_count for sid in usable_sensor_ids) / len(
-        usable_sensor_ids
-    )
-    avg_baseline = sum(baselines[sid].median_count for sid in usable_sensor_ids) / len(
-        usable_sensor_ids
-    )
-
-    if avg_baseline <= 0:
-        return NO_DATA, None
-
-    threshold = avg_baseline * settings.crowd_high_threshold_multiplier
-    if avg_current >= threshold:
-        return HIGH, "This corridor is above your usual density threshold right now."
+    if high_sensor_ids:
+        return (
+            HIGH,
+            "This route includes a corridor with unusually high pedestrian density.",
+        )
     return LOW, None
+
+
+def load_config(conn) -> ScoringConfig:
+    """Load DS2 thresholds, with documented defaults for optional DS3 keys."""
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT config_key, value FROM config")
+        values = {row["config_key"]: row["value"] for row in cursor.fetchall()}
+    return ScoringConfig(
+        buffer_radius_m=float(values.get("route_buffer_radius_m", 120)),
+        relative_threshold=float(values.get("relative_threshold", 1.5)),
+        absolute_threshold=float(values.get("absolute_threshold", 500)),
+        minimum_observations=int(values.get("minimum_observations", 10)),
+        minimum_sensors=int(values.get("minimum_route_sensors", 1)),
+        live_max_age_minutes=int(values.get("live_max_age_minutes", 30)),
+    )
+
+
+def score_route_from_database(
+    geometry: Sequence[Sequence[float]], conn, now: datetime | None = None
+) -> tuple[str, str | None]:
+    """Match and score a route using the existing shared MySQL schema."""
+    cfg = load_config(conn)
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT location_id, latitude, longitude FROM location "
+            "WHERE location_type = 'sensor'"
+        )
+        sensors = [
+            SensorLocation(str(row["location_id"]), row["latitude"], row["longitude"])
+            for row in cursor.fetchall()
+        ]
+    matched = match_sensors_to_route(geometry, sensors, cfg.buffer_radius_m)
+    if len(matched) < cfg.minimum_sensors:
+        return NO_DATA, None
+    placeholders = ", ".join(["%s"] * len(matched))
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT p.location_id, p.total_of_directions, p.sensing_datetime "
+            "FROM pedestrian_count_minute p JOIN ("
+            "SELECT location_id, MAX(sensing_datetime) AS newest "
+            f"FROM pedestrian_count_minute WHERE location_id IN ({placeholders}) "
+            "GROUP BY location_id) latest ON latest.location_id = p.location_id "
+            "AND latest.newest = p.sensing_datetime",
+            matched,
+        )
+        readings = {
+            str(row["location_id"]): SensorReading(
+                str(row["location_id"]),
+                float(row["total_of_directions"]),
+                row["sensing_datetime"],
+            )
+            for row in cursor.fetchall()
+            if row["total_of_directions"] is not None
+        }
+        score_time = now or datetime.now(MELBOURNE_TIMEZONE)
+        baseline_weekday, baseline_hour = melbourne_baseline_slot(score_time)
+        cursor.execute(
+            "SELECT location_id, median_count, observation_count FROM baseline "
+            f"WHERE location_id IN ({placeholders}) "
+            "AND day_of_week = %s AND hourday = %s",
+            [*matched, baseline_weekday, baseline_hour],
+        )
+        baselines = {
+            str(row["location_id"]): SensorBaseline(
+                str(row["location_id"]),
+                float(row["median_count"]),
+                int(row["observation_count"]),
+            )
+            for row in cursor.fetchall()
+        }
+    return score_route(matched, readings, baselines, cfg, score_time)
+
+
+def main():
+    """Small connection check; applications should call score_route_from_database."""
+    try:
+        import pymysql
+    except ModuleNotFoundError:
+        raise SystemExit(
+            "pymysql is not installed. Run: python -m pip install -r requirements.txt"
+        ) from None
+    password = os.environ.get("DB_PASSWORD")
+    if not password:
+        password = input("Database password (visible): ").strip()
+    if not password:
+        raise SystemExit("Database password cannot be empty.")
+    conn = pymysql.connect(
+        host=os.environ.get("DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"),
+        port=int(os.environ.get("DB_PORT", "3306")),
+        user=os.environ.get("DB_USER", "admin"),
+        password=password,
+        database=os.environ.get("DB_NAME", "onboarding"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+    try:
+        config = load_config(conn)
+        print(config)
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()

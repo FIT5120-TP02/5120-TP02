@@ -1,49 +1,14 @@
-"""Pydantic request/response schemas for the REST API."""
+"""
+Pydantic request/response schemas for the REST API.
+
+No account/auth schemas here - per team decision (privacy: no user login),
+this is an anonymous, no-account public API. Every request is
+self-contained; nothing is scoped to a signed-in user.
+"""
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-
-# ---------- Auth ----------
-class UserCreate(BaseModel):
-    username: str
-    password: str = Field(min_length=8)
-
-    @field_validator("password")
-    @classmethod
-    def password_within_bcrypt_limit(cls, value: str) -> str:
-        # bcrypt only uses the first 72 bytes of a password - reject longer
-        # ones at signup instead of letting them get silently truncated
-        # (see app.core.security._encode_and_validate for the same check).
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("Password must be at most 72 bytes when UTF-8 encoded.")
-        return value
-
-
-class UserOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    user_id: int
-    username: str
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-# ---------- Preferences ----------
-class PreferenceIn(BaseModel):
-    noise_tolerance: float | None = None
-    light_tolerance: float | None = None
-    crowd_tolerance: float | None = None
-    preferred_route_type: str | None = None
-
-
-class PreferenceOut(PreferenceIn):
-    model_config = ConfigDict(from_attributes=True)
-    preference_id: int
-    user_id: int
+from pydantic import BaseModel
 
 
 # ---------- Routes (US 1.1 / US 1.2) ----------
@@ -52,7 +17,6 @@ class RouteCompareRequest(BaseModel):
     origin_lng: float
     destination_lat: float
     destination_lng: float
-    preference_id: int | None = None
 
 
 class RouteOption(BaseModel):

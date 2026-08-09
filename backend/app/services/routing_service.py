@@ -42,10 +42,67 @@ def get_candidate_routes(
     if settings.routing_provider == "osrm":
         return _osrm_candidate_routes(origin_lat, origin_lng, destination_lat, destination_lng)
 
+    if settings.routing_provider == "openrouteservice":
+        return _ors_candidate_routes(origin_lat, origin_lng, destination_lat, destination_lng)
+
     raise NotImplementedError(
         f"Routing provider '{settings.routing_provider}' is not wired up yet. "
         "Add a branch here once the team confirms the free-tier service."
     )
+
+
+_ORS_BASE_URL = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson"
+
+
+def _ors_candidate_routes(
+    origin_lat: float, origin_lng: float, destination_lat: float, destination_lng: float
+) -> list[CandidateRoute]:
+    """
+    OpenRouteService (hosted, free tier - 2000 req/day, 40 req/min as of
+    writing). Chosen over self-hosted OSRM because it needs no server to
+    run/maintain - just a free API key from openrouteservice.org.
+
+    Set ROUTING_PROVIDER=openrouteservice and ROUTING_SERVICE_API_KEY in
+    .env to use this.
+
+    Note: alternative_routes is best-effort - ORS may return fewer than
+    target_count alternatives for the foot-walking profile depending on the
+    area/distance, so callers should not assume exactly 3 routes back (the
+    `mock` provider is what guarantees exactly 3, for frontend dev/demo).
+    """
+    settings = get_settings()
+    if not settings.routing_service_api_key:
+        raise RuntimeError(
+            "ROUTING_SERVICE_API_KEY is not set. Get a free key at "
+            "https://openrouteservice.org/dev/#/signup and set it in .env."
+        )
+
+    body = {
+        "coordinates": [[origin_lng, origin_lat], [destination_lng, destination_lat]],
+        "alternative_routes": {"target_count": 3, "share_factor": 0.6, "weight_factor": 1.4},
+    }
+    headers = {
+        "Authorization": settings.routing_service_api_key,
+        "Content-Type": "application/json",
+    }
+    response = httpx.post(_ORS_BASE_URL, json=body, headers=headers, timeout=10)
+    response.raise_for_status()
+    data = response.json()
+
+    routes: list[CandidateRoute] = []
+    for i, feature in enumerate(data.get("features", [])):
+        coords = feature["geometry"]["coordinates"]  # [[lng, lat], ...]
+        summary = feature["properties"]["summary"]
+        routes.append(
+            CandidateRoute(
+                route_id=f"ors-{i}",
+                label=f"Route {i + 1}",
+                distance_km=round(summary["distance"] / 1000, 2),
+                duration_min=round(summary["duration"] / 60, 1),
+                geometry=[[lat, lng] for lng, lat in coords],
+            )
+        )
+    return routes
 
 
 def _osrm_candidate_routes(
