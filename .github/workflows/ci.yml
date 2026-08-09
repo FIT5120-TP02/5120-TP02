@@ -19,15 +19,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r backend/requirements.txt
-          pip install ruff black
+          pip install -r ds3-sensory-scoring/requirements.txt
+          pip install ruff black==24.10.0
 
       - name: Lint (ruff)
-        run: ruff check backend/app backend/tests
+        run: ruff check backend/app backend/tests ds3-sensory-scoring
 
       - name: Format check (black)
-        run: black --check backend/app backend/tests
+        run: black --config backend/pyproject.toml --check backend/app backend/tests ds3-sensory-scoring
 
       - name: Run tests
         run: |
           cd backend
           pytest -v
+          cd ..
+          python -m unittest discover -s ds3-sensory-scoring -p "test_*.py" -v
