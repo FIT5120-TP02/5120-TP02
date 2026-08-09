@@ -24,7 +24,7 @@ export default function QuietSpaces() {
     const [filter, setFilter] = useState('all')
     const [sortBy, setSortBy] = useState('distance')
     const [selectedId, setSelectedId] = useState(null)
-    const [radiusKm, setRadiusKm] = useState(1.5)
+    const [radiusKm, setRadiusKm] = useState(0.5)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {

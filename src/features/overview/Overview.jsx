@@ -2,6 +2,7 @@ import styles from "./Overview.module.css"
 import { useState, useEffect } from 'react'
 import { fetchConditions } from "./api/fetchConditions";
 import { fetchForecast} from './api/fetchForecast'
+import { fetchRefuges } from "../quiet-spaces/api/fetchRefuges";
 import CrowdForecastChart from "./components/CrowdForecastChart";
 import { KNOWN_LOCATIONS } from '../../lib/geocode'
 import NavCard from "./components/NavCard";
@@ -50,6 +51,7 @@ export default function Overview({onNavigate}) {
     const [threshold, setThreshold] = useState(60)
     const [destination, setDestination] = useState('')
     const [forecast, setForecast] = useState([])
+    const [refugeCount, setRefugeCount] = useState(null)
     useEffect(() => {
         async function loadConditions() {
             const data = await fetchConditions()
@@ -60,8 +62,14 @@ export default function Overview({onNavigate}) {
             const data = await fetchForecast()
             setForecast(data)
         }
+        async function loadRefugeCount() {
+            const cbd = KNOWN_LOCATIONS['My Location — Melbourne CBD']
+            const data = await fetchRefuges({ lat: cbd.lat, lng: cbd.lng, radiusKm: 0.5 })
+            setRefugeCount(data.length)
+        }
         loadConditions()
         loadForecast()
+        loadRefugeCount()
     }, [])
 
     return (
@@ -230,7 +238,8 @@ export default function Overview({onNavigate}) {
                             icon={'♡'}
                             title={'Quiet Spaces'}
                             subtitle={
-                                '5 sensory refuges within 700m of you'
+                                refugeCount != null
+                                    ? `${refugeCount} sensory refuge${refugeCount === 1 ? '' : 's'} nearby` : 'Loading...'
                             }
                             onClick={() => onNavigate('refuges')}
                         />
