@@ -17,6 +17,7 @@ or the backend.
 
 - fewer than `minimum_route_sensors` sensors match the route;
 - any matched sensor has no live reading;
+- a live reading has no observation timestamp;
 - a live reading is older than `live_max_age_minutes`;
 - any matched sensor has no baseline for the current slot;
 - a baseline has fewer than `minimum_observations`; or
@@ -30,6 +31,10 @@ current_count >= median_count * relative_threshold
 ```
 
 If the data is complete and no sensor is HIGH, the result is `LOW`.
+
+DS1's naive MySQL `sensing_datetime` values are interpreted as UTC, matching
+the schema documentation. Baseline weekday/hour selection is always converted
+to `Australia/Melbourne`, including when callers supply a UTC timestamp.
 
 DS2's database keys are used when present. Optional DS3 configuration keys
 fall back to these values:

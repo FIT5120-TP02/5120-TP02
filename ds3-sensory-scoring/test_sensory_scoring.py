@@ -14,6 +14,7 @@ from sensory_scoring import (
     SensorLocation,
     SensorReading,
     match_sensors_to_route,
+    melbourne_baseline_slot,
     score_route,
 )
 
@@ -58,6 +59,17 @@ class RouteScoringTests(unittest.TestCase):
         baselines = {"1": SensorBaseline("1", 300, 20)}
         self.assertEqual(self.score(["1"], readings, baselines), NO_DATA)
 
+    def test_unknown_live_observation_time_is_no_data(self):
+        readings = {"1": SensorReading("1", 600, None)}
+        baselines = {"1": SensorBaseline("1", 300, 20)}
+        self.assertEqual(self.score(["1"], readings, baselines), NO_DATA)
+
+    def test_naive_database_timestamp_is_interpreted_as_utc(self):
+        naive_utc = datetime(2026, 8, 9, 1, 45, tzinfo=timezone.utc).replace(tzinfo=None)
+        readings = {"1": SensorReading("1", 600, naive_utc)}
+        baselines = {"1": SensorBaseline("1", 300, 20)}
+        self.assertEqual(self.score(["1"], readings, baselines), HIGH)
+
     def test_relative_threshold_alone_is_low(self):
         readings = {"1": SensorReading("1", 40, self.now)}
         baselines = {"1": SensorBaseline("1", 20, 20)}
@@ -71,9 +83,7 @@ class RouteScoringTests(unittest.TestCase):
     def test_both_thresholds_is_high(self):
         readings = {"1": SensorReading("1", 600, self.now)}
         baselines = {"1": SensorBaseline("1", 300, 20)}
-        status, notification = score_route(
-            ["1"], readings, baselines, self.config, self.now
-        )
+        status, notification = score_route(["1"], readings, baselines, self.config, self.now)
         self.assertEqual(status, HIGH)
         self.assertIsNotNone(notification)
 
@@ -87,6 +97,18 @@ class RouteScoringTests(unittest.TestCase):
             "2": SensorBaseline("2", 400, 20),
         }
         self.assertEqual(self.score(["1", "2"], readings, baselines), HIGH)
+
+
+class BaselineTimezoneTests(unittest.TestCase):
+    def test_utc_time_is_converted_to_melbourne_slot(self):
+        # 2026-08-08 16:30 UTC is 2026-08-09 02:30 in Melbourne (UTC+10),
+        # crossing both the date and weekday boundary.
+        utc_time = datetime(2026, 8, 8, 16, 30, tzinfo=timezone.utc)
+        self.assertEqual(melbourne_baseline_slot(utc_time), (6, 2))
+
+    def test_naive_supplied_time_is_treated_as_melbourne_local(self):
+        local_time = datetime(2026, 8, 9, 23, 30, tzinfo=timezone.utc).replace(tzinfo=None)
+        self.assertEqual(melbourne_baseline_slot(local_time), (6, 23))
 
 
 if __name__ == "__main__":

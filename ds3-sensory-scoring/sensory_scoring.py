@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Mapping, Sequence
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 LOW = "LOW"
 HIGH = "HIGH"
 NO_DATA = "NO DATA"
+MELBOURNE_TIMEZONE = ZoneInfo("Australia/Melbourne")
+# DS1 documents sensing_datetime as a UTC value (for example, +00:00).
+# MySQL DATETIME drops the offset, so naive values read back from the shared
+# database must be restored as UTC before freshness comparisons.
+DATABASE_TIMEZONE = timezone.utc
 
 
 @dataclass(frozen=True)
@@ -79,7 +85,7 @@ def match_sensors_to_route(
             _point_segment_distance_m(
                 (sensor.latitude, sensor.longitude), segment_start, segment_end
             )
-            for segment_start, segment_end in zip(points, points[1:])
+            for segment_start, segment_end in pairwise(points)
         )
         if distance <= buffer_radius_m and sensor.sensor_id not in seen:
             matched.append(sensor.sensor_id)
@@ -89,12 +95,28 @@ def match_sensors_to_route(
 
 def _is_stale(observed_at: datetime | None, now: datetime, max_age_minutes: int) -> bool:
     if observed_at is None:
-        return False
+        return True
     if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=timezone.utc)
+        observed_at = observed_at.replace(tzinfo=DATABASE_TIMEZONE)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
     return now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc) > timedelta(
         minutes=max_age_minutes
     )
+
+
+def melbourne_baseline_slot(when: datetime | None = None) -> tuple[int, int]:
+    """Return DS2's ``(weekday, hour)`` slot in Melbourne local time.
+
+    A supplied naive datetime is interpreted as Melbourne local time. An aware
+    datetime is converted to Melbourne before selecting the baseline slot.
+    """
+    value = when or datetime.now(MELBOURNE_TIMEZONE)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=MELBOURNE_TIMEZONE)
+    else:
+        value = value.astimezone(MELBOURNE_TIMEZONE)
+    return value.weekday(), value.hour
 
 
 def score_route(
@@ -137,7 +159,10 @@ def score_route(
         >= baselines[sensor_id].median_count * cfg.relative_threshold
     ]
     if high_sensor_ids:
-        return HIGH, "This route includes a corridor with unusually high pedestrian density."
+        return (
+            HIGH,
+            "This route includes a corridor with unusually high pedestrian density.",
+        )
     return LOW, None
 
 
@@ -196,12 +221,13 @@ def score_route_from_database(
             if row["total_of_directions"] is not None
         }
 
-        score_time = now or datetime.now(ZoneInfo("Australia/Melbourne"))
+        score_time = now or datetime.now(MELBOURNE_TIMEZONE)
+        baseline_weekday, baseline_hour = melbourne_baseline_slot(score_time)
         cursor.execute(
             "SELECT location_id, median_count, observation_count FROM baseline "
             f"WHERE location_id IN ({placeholders}) "
             "AND day_of_week = %s AND hourday = %s",
-            [*matched, score_time.weekday(), score_time.hour],
+            [*matched, baseline_weekday, baseline_hour],
         )
         baselines = {
             str(row["location_id"]): SensorBaseline(
@@ -230,9 +256,7 @@ def main():
         raise SystemExit("Database password cannot be empty.")
 
     conn = pymysql.connect(
-        host=os.environ.get(
-            "DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"
-        ),
+        host=os.environ.get("DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"),
         port=int(os.environ.get("DB_PORT", "3306")),
         user=os.environ.get("DB_USER", "admin"),
         password=password,
