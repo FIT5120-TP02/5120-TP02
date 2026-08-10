@@ -1,0 +1,43 @@
+name: Daily hourly ingest + baseline recompute
+
+# 1. DS1's ingesting.py::load_hours() - refreshes pedestrian_count_hour with
+#    the latest full year of hourly counts (upsert, safe to rerun).
+# 2. DS2's baseline.py - recomputes the baseline table (median/average per
+#    location_id + day_of_week + hourday) from that hourly data, and
+#    rewrites the config table's threshold defaults.
+#
+# Order matters: baseline.py reads pedestrian_count_hour, so the ingest
+# step must finish first.
+
+on:
+  schedule:
+    # 16:13 UTC - off the exact hour (GitHub recommends this to reduce
+    # queueing on shared scheduler load), roughly 2-3am Melbourne time so
+    # it doesn't overlap the day's real traffic.
+    - cron: "13 16 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  daily-recompute:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pymysql pandas
+
+      - name: Refresh pedestrian_count_hour
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: python ds1-ingestion/ingesting.py hours
+
+      - name: Recompute baseline + config
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        # baseline.py already adds the repo root to sys.path itself
+        # (Path(__file__).resolve().parents[1]), so no PYTHONPATH needed here.
+        run: python ds2-baseline/baseline.py

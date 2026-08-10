@@ -1,0 +1,40 @@
+name: Poll live pedestrian counts (every 15 min)
+
+# DS1's ingesting.py::poll_minutes() - pulls the latest per-minute sensor
+# readings into pedestrian_count_minute. The FastAPI backend's sensory
+# scoring treats a reading as stale (NO DATA) once it's more than 30
+# minutes old, so this needs to run at least every ~15-20 min to keep
+# routes scored LOW/HIGH instead of falling back to NO DATA.
+
+on:
+  schedule:
+    # GitHub's scheduler runs on a best-effort basis and can be a few
+    # minutes late, especially on low-traffic public repos - 15 min is a
+    # safe margin under the 30-min staleness cutoff.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  poll-minutes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pymysql
+
+      - name: Poll pedestrian_count_minute
+        env:
+          # db.py defaults host/port/user/database to the shared instance -
+          # only the password needs to come from a secret. Add DB_PASSWORD
+          # in GitHub: Settings -> Secrets and variables -> Actions.
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          # ingesting.py does `import db` with no sys.path handling of its
+          # own (unlike baseline.py), so db.py at the repo root needs to be
+          # put on the path explicitly when running the script from a
+          # subfolder.
+          PYTHONPATH: ${{ github.workspace }}
+        run: python ds1-ingestion/ingesting.py minutes
