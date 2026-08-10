@@ -1,0 +1,77 @@
+export const mockRoutes = [
+    {
+        id: 'quiet-riverside-path',
+        name: 'Quiet Riverside Path',
+        waypoints: ['Yarra Riverbank', 'Riverside Walk', 'Flinders Lane', 'Elizabeth St'],
+        description:
+        'The calmest CBD route. Follows the Yarra riverside path before entering via a quiet laneway. Minimal noise, low foot traffic, and mostly flat terrain.',
+        durationMin: 18,
+        distanceKm: 1.4,
+        crowdDensityPct: 24,
+        loadLevel: 'low',
+        transport: 'Flinders St Station',
+        tags: [],
+        breakdown: [
+        { zoneType: 'quiet', widthPct: 25 },
+        { zoneType: 'quiet', widthPct: 25 },
+        { zoneType: 'walk', widthPct: 20 },
+        { zoneType: 'busy', widthPct: 15 },
+        { zoneType: 'transit', widthPct: 15 },
+        ],
+        steps: [
+        { label: 'Start: Yarra Riverbank (very quiet)', zoneType: 'quiet' },
+        { label: 'Riverside Walk — 600m', zoneType: 'quiet', distanceMeters: 600 },
+        { label: 'Flinders Lane (low traffic)', zoneType: 'walk' },
+        { label: 'Elizabeth St crossing', zoneType: 'busy' },
+        ],
+    },
+    {
+        id: 'standard-cbd-route',
+        name: 'Standard CBD Route',
+        waypoints: ['Flinders St', 'Elizabeth St', 'Bourke St', 'Flinders St Station'],
+        description:
+        'The most direct route through the CBD grid. Faster, but passes through high foot-traffic zones and an active construction site.',
+        durationMin: 14,
+        distanceKm: 1.1,
+        crowdDensityPct: 85,
+        loadLevel: 'high',
+        transport: 'Flinders St Station',
+        tags: [{ type: 'construction', label: 'Construction' }],
+        breakdown: [
+        { zoneType: 'busy', widthPct: 50 },
+        { zoneType: 'busy', widthPct: 30 },
+        { zoneType: 'transit', widthPct: 20 },
+        ],
+        steps: [
+        { label: 'Start: Flinders St (busy)', zoneType: 'busy' },
+        { label: 'Elizabeth St — 400m', zoneType: 'busy', distanceMeters: 400 },
+        { label: 'Bourke St crossing', zoneType: 'busy' },
+        { label: 'Arrive Flinders St Station', zoneType: 'transit' },
+        ],
+    },
+    {
+        id: 'inner-lane-alternative',
+        name: 'Inner Lane Alternative',
+        waypoints: ['Degraves St', 'Centre Place', 'Flinders Lane', 'Flinders St Station'],
+        description:
+        "A laneway-heavy route through Melbourne's iconic arcades. Scenic, but a public event nearby may increase foot traffic today.",
+        durationMin: 16,
+        distanceKm: 1.2,
+        crowdDensityPct: 51,
+        loadLevel: 'medium',
+        transport: 'Flinders St Station',
+        tags: [{ type: 'event', label: 'Public Event' }],
+        breakdown: [
+        { zoneType: 'walk', widthPct: 30 },
+        { zoneType: 'quiet', widthPct: 20 },
+        { zoneType: 'busy', widthPct: 30 },
+        { zoneType: 'transit', widthPct: 20 },
+        ],
+        steps: [
+        { label: 'Start: Degraves St', zoneType: 'walk' },
+        { label: 'Centre Place — 250m', zoneType: 'quiet', distanceMeters: 250 },
+        { label: 'Flinders Lane', zoneType: 'busy' },
+        { label: 'Arrive Flinders St Station', zoneType: 'transit' },
+        ],
+    },
+    ]
