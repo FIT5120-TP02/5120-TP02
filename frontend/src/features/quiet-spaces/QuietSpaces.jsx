@@ -3,6 +3,7 @@ import styles from './QuietSpaces.module.css'
 import { fetchRefuges } from './api/fetchRefuges'
 import SensoryRing from './components/SensoryRing'
 import { KNOWN_LOCATIONS } from '../../lib/geocode'
+import { useLiveLocation } from '../../lib/liveLocation'
 
 const TYPE_CONFIG = {
     park: { icon: '⊙', label: 'Park', bg: '#dcfce7', color: '#16a34a' },
@@ -19,7 +20,8 @@ const FILTERS = [
     { value: 'garden', label: 'Gardens' },
 ]
 
-export default function QuietSpaces() {
+export default function QuietSpaces({onNavigate}) {
+    const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()
     const [refuges, setRefuges] = useState([])
     const [filter, setFilter] = useState('all')
     const [sortBy, setSortBy] = useState('distance')
@@ -28,16 +30,24 @@ export default function QuietSpaces() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        if (locationLoading || !userLocation) return
+
         async function load() {
             setLoading(true)
-            const cbd = KNOWN_LOCATIONS['My Location — Melbourne CBD']
-            const data = await fetchRefuges({ lat: cbd.lat, lng: cbd.lng, radiusKm: radiusKm })
-            setRefuges(data)
-            setSelectedId(data[0]?.id ?? null)
-            setLoading(false)
+            try {
+                const data = await fetchRefuges({
+                    lat: userLocation.lat,
+                    lng: userLocation.lng,
+                    radiusKm: radiusKm,
+                })
+                setRefuges(data)
+                setSelectedId(data[0]?.id ?? null)
+            } finally {
+                setLoading(false)
+            }
         }
         load()
-    }, [radiusKm])
+    }, [radiusKm, userLocation, locationLoading])
 
     const filtered = refuges
         .filter((r) => filter === 'all' || r.type === filter)
@@ -52,7 +62,7 @@ export default function QuietSpaces() {
         })
 
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
-
+    console.log(selectedRefuge)
     return (
         <>
             <div className="HeaderContainer">
@@ -210,16 +220,17 @@ export default function QuietSpaces() {
                                     </div>
                                 )}
 
-                                <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                        selectedRefuge.name + (selectedRefuge.address ? ' ' + selectedRefuge.address : '')
-                                    )}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                <button
+                                    onClick={() => 
+                                        onNavigate('routes', selectedRefuge.name, {
+                                            lat: selectedRefuge.lat,
+                                            lng: selectedRefuge.lng,
+                                        })
+                                    }
                                     className={styles.navigateButton}
                                 >
                                     Navigate to {selectedRefuge.name} →
-                                </a>
+                                </button>
                             </div>
                         )}
                     </div>

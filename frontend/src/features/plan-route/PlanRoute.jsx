@@ -11,7 +11,7 @@ import RouteMap from './components/RouteMap'
 
 const MY_LOCATION_DEFAULT = 'My Location — Melbourne CBD'
 
-export default function PlanRoute({ initialDestination = '' }) {
+export default function PlanRoute({ initialDestination = '', initialDestinationCoords = null }) {
     const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()
     const [from, setFrom] = useState(MY_LOCATION_DEFAULT)
     const [to, setTo] = useState(initialDestination)
@@ -23,14 +23,14 @@ export default function PlanRoute({ initialDestination = '' }) {
     const [resolvedDestination, setResolvedDestination] = useState(null)
     const [useMyLocation, setUseMyLocation] = useState(true)
     const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
-    async function handleSearch(fromText, toText) {
+    async function handleSearch(fromText, toText, destinationOverride = null) {
         setLoading(true)
         setError(null)
         try {
             const origin = (useMyLocation && userLocation)
                 ? { name: 'My Location', ...userLocation }
                 : await resolveLocation(fromText)
-            const destination = await resolveLocation(toText)
+            const destination = destinationOverride ?? await resolveLocation(toText)
 
             setResolvedOrigin(origin)
             setResolvedDestination(destination)
@@ -48,7 +48,10 @@ export default function PlanRoute({ initialDestination = '' }) {
 
     useEffect(() => {
         if (initialDestination && !locationLoading) {
-            handleSearch(from, initialDestination)
+            const destinationOverride = initialDestinationCoords
+                ? {name: initialDestination, lat: initialDestinationCoords.lat, lng: initialDestinationCoords.lng}
+                : null
+            handleSearch(from, initialDestination, destinationOverride)
         }
     }, [locationLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
