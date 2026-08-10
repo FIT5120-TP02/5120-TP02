@@ -31,7 +31,6 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
 
         const data = await res.json()
 
-        console.log('API response:', data)
         console.table(
             data.routes.map((route) => ({
                 id: route.route_id,

@@ -23,11 +23,9 @@ export default function PlanRoute({ initialDestination = '' }) {
     const [resolvedDestination, setResolvedDestination] = useState(null)
 
     const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
-    console.log(userLocation)
     async function handleSearch(fromText, toText) {
         setLoading(true)
         setError(null)
-        console.log('handleSearch called, userLocation is:', userLocation)
         try {
             const origin = userLocation
                 ? { name: 'My Location', ...userLocation }

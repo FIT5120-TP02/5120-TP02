@@ -18,7 +18,6 @@ export function useLiveLocation() {
             return
         }
 
-        console.log('Starting watchPosition...')
 
         const watchId = navigator.geolocation.watchPosition(
             (position) => {
