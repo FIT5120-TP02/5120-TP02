@@ -1,0 +1,90 @@
+.card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: opacity 150ms ease;
+    font-family: inherit;
+}
+.card:hover {
+    opacity: 0.85;
+}
+
+.alerts {
+    background-color: rgba(254, 242, 242, 0.8);
+    border: 1px solid #fecaca;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: background-color 150ms ease;
+}
+.alerts:hover {
+    background-color: #fef2f2;
+}
+.alerts:hover .title {
+    color: #b91c1c;
+}
+
+.refuges {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid #ffffff;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: background-color 150ms ease;
+}
+.refuge:hover {
+    background-color: rgba(132, 169, 140, 0.8);
+}
+.refuge:hover .title {
+    color: #4A7D58;
+}
+
+.iconWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    background-color: #ffffff;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+}
+
+.textWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex: 1;
+}
+
+.title {
+    font-size: 0.9375rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+    color: #134e4a;
+    transition: color 150ms ease;
+}
+
+
+.subtitle {
+    font-size: 0.8125rem;
+    color: #0d9488;
+}
+
+.arrow {
+    font-size: 1.125rem;
+    color: #2dd4bf;
+    flex-shrink: 0;
+}

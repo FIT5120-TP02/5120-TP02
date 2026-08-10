@@ -1,0 +1,66 @@
+.panel {
+    background-color: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 1rem;
+    padding: 1.5rem;
+}
+.headerRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.name {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #134e4a;
+    font-family: "DM Serif Display", serif;
+}
+.via {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    color: #0d9488;
+}
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.875rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.description {
+    font-size: 0.875rem;
+    color: #115e59;
+    line-height: 1.6;
+    margin: 0 0 1rem;
+}
+.statsGrid {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.6);
+}
+.statLabel {
+    margin: 0;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #2dd4bf;
+}
+.statValue {
+    margin: 0.125rem 0 0;
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: #134e4a;
+}
+.statValueSmall {
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #134e4a;
+}
