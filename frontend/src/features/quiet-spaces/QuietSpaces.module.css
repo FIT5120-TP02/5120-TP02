@@ -1,0 +1,340 @@
+.content {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.banner {
+    background-color: rgba(240, 253, 244, 0.7);
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.bannerLeft {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+.bannerIcon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.75rem;
+    background-color: #4d7c62;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.bannerTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #166534;
+}
+.bannerSubtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: #15803d;
+    max-width: 32rem;
+    line-height: 1.6;
+}
+.sortSelect {
+    font-size: 0.75rem;
+    color: #0f766e;
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid #ccfbf1;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+}
+/* Radius Slider */
+.radiusRow {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid #ffffff;
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+}
+.radiusHeader {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+}
+.radiusLabel {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #115e59;
+}
+.radiusValue {
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: #134e4a;
+}
+.radiusSlider {
+    width: 100%;
+    height: 6px;
+    border-radius: 9999px;
+    appearance: none;
+    cursor: pointer;
+    accent-color: #1a5f7a;
+}
+.radiusRange {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #2dd4bf;
+    margin-top: 0.25rem;
+}
+
+
+.filterRow {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.filterButton {
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: none;
+    background-color: rgba(255, 255, 255, 0.6);
+    color: #0d9488;
+    cursor: pointer;
+}
+.filterButton:hover {
+    background-color: #ffffff;
+}
+.filterActive {
+    background-color: #115e59;
+    color: #ffffff;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+@media (min-width: 1024px) {
+    .layout {
+        grid-template-columns: 2fr 3fr;
+    }
+}
+
+.listColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.refugeCard {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    width: 100%;
+    text-align: left;
+    background-color: rgba(255, 255, 255, 0.6);
+    border: 1px solid #ffffff;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 150ms ease;
+}
+.refugeCard:hover {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+.refugeCardSelected {
+    background-color: #ffffff;
+    border-color: #5eead4;
+    box-shadow: 0 0 0 2px #99f6e4;
+}
+.refugeCardBody {
+    flex: 1;
+    min-width: 0;
+}
+.refugeTagsRow {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+}
+.typeTag {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+}
+.sunflowerTag {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background-color: #fef9c3;
+    color: #a16207;
+}
+.quietTag {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background-color: #dcfce7;
+    color: #16a34a;
+}
+.refugeName {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #134e4a;
+}
+.refugeAddress {
+    margin: 0.125rem 0 0;
+    font-size: 0.75rem;
+    color: #0f766e;
+}
+.refugeMeta {
+    margin: 0.375rem 0 0;
+    font-size: 0.75rem;
+    color: #2dd4bf;
+}
+.refugeMeta strong {
+    color: #0f766e;
+}
+
+.detailColumn {
+    min-width: 0;
+}
+.detailPanel {
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid #ffffff;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+.detailHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+.detailTagsRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+.detailName {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #134e4a;
+    font-family: "DM Serif Display", serif;
+}
+.detailAddress {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: #0f766e;
+}
+
+.statsRow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    padding: 1rem 0;
+    border-top: 1px solid #f0fdfa;
+    border-bottom: 1px solid #f0fdfa;
+}
+.statLabel {
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #2dd4bf;
+}
+.statValue {
+    margin: 0.125rem 0 0;
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: #134e4a;
+}
+
+.sectionLabel {
+    margin: 0 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #0f766e;
+}
+.hoursText {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #0d9488;
+}
+.featuresRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.featureTag {
+    font-size: 0.75rem;
+    background-color: #f0fdfa;
+    color: #0f766e;
+    border: 1px solid #ccfbf1;
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+}
+
+.navigateButton {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 0.875rem;
+    background-color: #115e59;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: 0.75rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+.navigateButton:hover {
+    background-color: #134e4a;
+}
+
+.sunflowerStrip {
+    background-color: #fefce8;
+    border: 1px solid #fef08a;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.sunflowerEmoji {
+    font-size: 1.875rem;
+    flex-shrink: 0;
+}
+.sunflowerTitle {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #854d0e;
+}
+.sunflowerText {
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
+    color: #a16207;
+}

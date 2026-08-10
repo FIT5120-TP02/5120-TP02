@@ -1,0 +1,12 @@
+.count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #134e4a;
+    margin: 0 0 0.75rem;
+}
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
