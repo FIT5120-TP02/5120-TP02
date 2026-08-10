@@ -9,7 +9,7 @@ import RouteDetail from './components/RouteDetail'
 import RouteBreakdown from './components/RouteBreakdown'
 import RouteMap from './components/RouteMap'
 
-const MY_LOCATION_DEFAULT = 'My Location – Melbourne CBD'
+const MY_LOCATION_DEFAULT = 'My Location — Melbourne CBD'
 
 export default function PlanRoute({ initialDestination = '' }) {
     const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()

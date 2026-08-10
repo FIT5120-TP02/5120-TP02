@@ -1,6 +1,6 @@
 import { transformRouteOption } from './transformRoute'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = 'https://five120-tp02.onrender.com'
 
 /**
  * @param {{ 
@@ -28,7 +28,9 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
                 preference_id: preferenceId ?? null,
             }),
         })
-
+        if (!res.ok) {
+            throw new Error(`API returned ${res.status}`)
+        }
         const data = await res.json()
 
         console.table(
@@ -42,7 +44,6 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
                 sensory_load: route.sensory_status,
             }))
         )
-        if (!res.ok) throw new Error(`API returned ${res.status}`)
 
         if (!data.routes || data.routes.length === 0) {
             throw new Error('No routes returned')

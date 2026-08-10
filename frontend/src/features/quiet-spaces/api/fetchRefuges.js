@@ -1,7 +1,7 @@
 import { mockRefuges } from './mockRefuges'
 import { transformRefuge } from './transformRefuges'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+const API_BASE = 'https://five120-tp02.onrender.com'
 
 /**
  * @param {{ lat: number, lng: number, radiusKm?: number }} params
