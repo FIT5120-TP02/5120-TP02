@@ -53,7 +53,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    # FRONTEND_ORIGIN accepts a comma-separated list (e.g. the deployed
+    # frontend + a teammate's local dev server) so more than one origin
+    # can be allowed without adding more env vars - see
+    # Settings.frontend_origins in app/core/config.py.
+    allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
