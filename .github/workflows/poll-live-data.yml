@@ -14,9 +14,21 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch: {} # lets you trigger it manually from the Actions tab to test
 
+permissions:
+  contents: read
+
+concurrency:
+  group: poll-live-data
+  # A run must never overlap another - poll_minutes() writes to the same
+  # rows a still-running instance could be mid-write on. Queue behind the
+  # in-flight run instead of cancelling it (cancelling mid-write is worse
+  # than running a few minutes late).
+  cancel-in-progress: false
+
 jobs:
   poll-minutes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +36,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install pymysql
+      - run: pip install pymysql==1.1.1
 
       - name: Poll pedestrian_count_minute
         env:

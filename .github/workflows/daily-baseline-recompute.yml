@@ -17,9 +17,20 @@ on:
     - cron: "13 16 * * *"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-baseline-recompute
+  # Same reasoning as the 15-min poll: never let two runs write
+  # pedestrian_count_hour/baseline/config at once. A manual test run and
+  # the nightly schedule landing at the same time should queue, not race.
+  cancel-in-progress: false
+
 jobs:
   daily-recompute:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +38,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install pymysql pandas
+      - run: pip install pymysql==1.1.1 pandas==2.2.3
 
       - name: Refresh pedestrian_count_hour
         env:
