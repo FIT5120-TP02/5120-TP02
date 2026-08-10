@@ -30,7 +30,10 @@ concurrency:
 jobs:
   daily-recompute:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 20 min wasn't enough - load_hours() downloads a full year's CSV
+    # export (800k+ rows) and baseline.py runs pandas over all of it.
+    # First real run took just over 20 min; 45 min leaves real margin.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
