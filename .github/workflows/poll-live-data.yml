@@ -8,10 +8,14 @@ name: Poll live pedestrian counts (every 15 min)
 
 on:
   schedule:
-    # GitHub's scheduler runs on a best-effort basis and can be a few
-    # minutes late, especially on low-traffic public repos - 15 min is a
-    # safe margin under the 30-min staleness cutoff.
-    - cron: "*/15 * * * *"
+    # Offset 7 min past the quarter-hour (:07/:22/:37/:52), not exactly on
+    # it. GitHub's own docs warn that schedules landing on round numbers
+    # (:00/:15/:30/:45) queue behind everyone else doing the same thing and
+    # can be delayed well past their nominal time on the shared runner
+    # pool - confirmed here: the very first two triggers both ran fine
+    # manually, but the on-schedule runs never fired within a useful
+    # window sitting on the "*/15" boundary.
+    - cron: "7-59/15 * * * *"
   workflow_dispatch: {} # lets you trigger it manually from the Actions tab to test
 
 permissions:
