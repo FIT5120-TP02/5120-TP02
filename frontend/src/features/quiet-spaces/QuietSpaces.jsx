@@ -30,18 +30,24 @@ export default function QuietSpaces({onNavigate}) {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (locationLoading || !userLocation) return
+        if (locationLoading) return
 
         async function load() {
             setLoading(true)
             try {
+                const location = userLocation ?? KNOWN_LOCATIONS['My Location — Melbourne CBD']
+
                 const data = await fetchRefuges({
-                    lat: userLocation.lat,
-                    lng: userLocation.lng,
+                    lat: location.lat,
+                    lng: location.lng,
                     radiusKm: radiusKm,
                 })
                 setRefuges(data)
                 setSelectedId(data[0]?.id ?? null)
+            } catch(err) {
+                console.error('Failed to load quiet spaces:', err)
+                setRefuges([])
+                setSelectedId(null)
             } finally {
                 setLoading(false)
             }
@@ -62,7 +68,6 @@ export default function QuietSpaces({onNavigate}) {
         })
 
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
-    console.log(selectedRefuge)
     return (
         <>
             <div className="HeaderContainer">

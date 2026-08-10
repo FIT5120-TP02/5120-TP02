@@ -27,7 +27,7 @@ export default function MainContent(props) {
             setPlannedDestination(destination)
         }
         if(destinationCoords !== undefined) {
-            setPlannedDestinationCoords(destinationCoords)
+            setPlannedDestinationCoords(destinationCoords ?? null)
         }
         setActiveButton(tabToButtonLabel[tab])
     }
