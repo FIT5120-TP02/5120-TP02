@@ -58,8 +58,14 @@ class Settings(BaseSettings):
     # that's a property of the data (Melbourne CBD sensors), not something
     # that should vary by deployment.
 
-    # CORS
+    # CORS - comma-separated so more than one origin can be allowed at
+    # once (e.g. the deployed frontend plus a teammate's local dev
+    # server) without needing a separate env var per origin.
     frontend_origin: str = "http://localhost:5173"
+
+    @property
+    def frontend_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
 
     @property
     def database_url(self) -> str:
