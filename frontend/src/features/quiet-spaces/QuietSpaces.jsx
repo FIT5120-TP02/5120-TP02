@@ -21,7 +21,7 @@ const FILTERS = [
 ]
 
 export default function QuietSpaces({onNavigate}) {
-    const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()
+    const { userLocation, loading: locationLoading } = useLiveLocation()
     const [refuges, setRefuges] = useState([])
     const [filter, setFilter] = useState('all')
     const [sortBy, setSortBy] = useState('distance')
