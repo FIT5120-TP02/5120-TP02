@@ -1,6 +1,21 @@
+import L from 'leaflet'
+
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import styles from './RouteMap.module.css'
+
+const defaultIcon = L.icon({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIcon2x,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+})
 
 export default function RouteMap({ route }) {
     if (!route?.geometry || route.geometry.length === 0) return null
@@ -22,10 +37,10 @@ export default function RouteMap({ route }) {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 />
                 <Polyline positions={positions} pathOptions={{ color: '#115e59', weight: 4 }} />
-                <Marker position={start}>
+                <Marker position={start} icon={defaultIcon}>
                     <Popup>Start</Popup>
                 </Marker>
-                <Marker position={end}>
+                <Marker position={end} icon={defaultIcon}>
                     <Popup>{route.name}</Popup>
                 </Marker>
             </MapContainer>
