@@ -21,13 +21,13 @@ export default function PlanRoute({ initialDestination = '' }) {
     const [selectedRouteId, setSelectedRouteId] = useState(null)
     const [resolvedOrigin, setResolvedOrigin] = useState(null)
     const [resolvedDestination, setResolvedDestination] = useState(null)
-
+    const [useMyLocation, setUseMyLocation] = useState(true)
     const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
     async function handleSearch(fromText, toText) {
         setLoading(true)
         setError(null)
         try {
-            const origin = userLocation
+            const origin = (useMyLocation && userLocation)
                 ? { name: 'My Location', ...userLocation }
                 : await resolveLocation(fromText)
             const destination = await resolveLocation(toText)
@@ -75,7 +75,10 @@ export default function PlanRoute({ initialDestination = '' }) {
                                     type="text"
                                     id="from"
                                     value={from}
-                                    onChange={(e) => setFrom(e.target.value)}
+                                    onChange={(e) => {
+                                        setFrom(e.target.value)
+                                        setUseMyLocation(false)
+                                    }}
                                     placeholder="Enter starting location"
                                 />
                             </div>
@@ -112,7 +115,7 @@ export default function PlanRoute({ initialDestination = '' }) {
                             <RouteMap route={selectedRoute} />
                             <RouteBreakdown route={selectedRoute} />
                             
-                            {selectedRoute && (
+                            {/* {selectedRoute && (
                                 <a
                                     href={`https://www.google.com/maps/dir/?api=1&origin=${resolvedOrigin.lat},${resolvedOrigin.lng}&destination=${resolvedDestination.lat},${resolvedDestination.lng}`}
                                     target="_blank"
@@ -121,7 +124,7 @@ export default function PlanRoute({ initialDestination = '' }) {
                                 >
                                     Start Navigation on This Route →
                                 </a>
-                            )}
+                            )} */}
                         </div>
                     </div>
                 )}

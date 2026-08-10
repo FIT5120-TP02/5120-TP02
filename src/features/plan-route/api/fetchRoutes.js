@@ -1,6 +1,6 @@
 import { transformRouteOption } from './transformRoute'
 
-const API_BASE_URL = 'https://five120-tp02.onrender.com'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 /**
  * @param {{ 
@@ -33,6 +33,8 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
 
         console.table(
             data.routes.map((route) => ({
+                origin: origin,
+                destination: destination,
                 id: route.route_id,
                 name: route.label,
                 distance: route.distance_km,
