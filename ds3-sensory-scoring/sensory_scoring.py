@@ -93,18 +93,16 @@ def match_sensors_to_route(
     return matched
 
 
-def _is_stale(
-    observed_at: datetime | None, now: datetime, max_age_minutes: int
-) -> bool:
+def _is_stale(observed_at: datetime | None, now: datetime, max_age_minutes: int) -> bool:
     if observed_at is None:
         return True
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=DATABASE_TIMEZONE)
     if now.tzinfo is None:
         now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
-    return now.astimezone(timezone.utc) - observed_at.astimezone(
-        timezone.utc
-    ) > timedelta(minutes=max_age_minutes)
+    return now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc) > timedelta(
+        minutes=max_age_minutes
+    )
 
 
 def melbourne_baseline_slot(when: datetime | None = None) -> tuple[int, int]:
@@ -232,13 +230,9 @@ def score_route_from_database(
             "AND latest.newest = sr.window_end",
             matched,
         )
-        readings, covered_sensor_ids = _sensor_readings_from_sensory_rows(
-            cursor.fetchall()
-        )
+        readings, covered_sensor_ids = _sensor_readings_from_sensory_rows(cursor.fetchall())
 
-        fallback_ids = [
-            sensor_id for sensor_id in matched if sensor_id not in covered_sensor_ids
-        ]
+        fallback_ids = [sensor_id for sensor_id in matched if sensor_id not in covered_sensor_ids]
         if fallback_ids:
             fallback_placeholders = ", ".join(["%s"] * len(fallback_ids))
             cursor.execute(
@@ -298,9 +292,7 @@ def main():
         raise SystemExit("Database password cannot be empty.")
 
     conn = pymysql.connect(
-        host=os.environ.get(
-            "DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"
-        ),
+        host=os.environ.get("DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"),
         port=int(os.environ.get("DB_PORT", "3306")),
         user=os.environ.get("DB_USER", "admin"),
         password=password,
