@@ -41,11 +41,26 @@ router = APIRouter(prefix="/api/routes", tags=["routes"])
 
 def _sensor_locations(db: Session) -> list[SensorLocation]:
     """
-    Loads every sensor location once per request (the whole `location`
-    table is ~273 rows total, cheap to scan) - DS3's
+    Loads every *usable* sensor location once per request (the whole
+    `location` table is ~273 rows total, cheap to scan) - DS3's
     `match_sensors_to_route()` does the actual distance filtering.
+
+    Excludes placement='Indoor' sensors (confirmed via the live DB on
+    2026-08-11: all 34 indoor points - libraries, community hubs, visitor
+    centres - have zero rows in pedestrian_count_minute/_hour/baseline,
+    while every one of the 100 outdoor points has data; Melbourne's public
+    pedestrian-counting datasets only cover street-level outdoor sensors).
+    Without this filter, score_route()'s all-matched-sensors-must-have-data
+    rule means any route whose buffer happens to include one of these
+    "ghost" sensors is permanently stuck at NO DATA, even when every real
+    (outdoor) sensor nearby is scoring fine - about a quarter of all
+    sensors are indoor, so this was affecting a large share of routes.
     """
-    rows = db.query(Location).filter(Location.location_type == "sensor").all()
+    rows = (
+        db.query(Location)
+        .filter(Location.location_type == "sensor", Location.placement == "Outdoor")
+        .all()
+    )
     return [SensorLocation(str(row.location_id), row.latitude, row.longitude) for row in rows]
 
 
