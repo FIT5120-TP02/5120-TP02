@@ -84,6 +84,7 @@ def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorRe
         )
         for row in sensory_rows
         if row.sensory_status.upper() in {sensory_scoring.LOW, sensory_scoring.HIGH}
+        and row.pedestrian_count is not None
         and row.pedestrian_count >= 0
     }
 
