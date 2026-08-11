@@ -87,6 +87,17 @@ class PedestrianCountMinute(Base):
     total_of_directions: Mapped[int | None] = mapped_column(Integer)
 
 
+class SensoryReadingRecord(Base):
+    """Latest DS1/DS3 integration rows introduced by database PR #14."""
+
+    __tablename__ = "sensory_reading"
+
+    location_id: Mapped[int] = mapped_column(ForeignKey("location.location_id"), primary_key=True)
+    window_end: Mapped[DateTime] = mapped_column(DateTime, primary_key=True)
+    pedestrian_count: Mapped[int | None] = mapped_column(Integer)
+    sensory_status: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
 class Config(Base):
     """
     Key/value tuning table DS2 writes to (route_buffer_radius_m,
