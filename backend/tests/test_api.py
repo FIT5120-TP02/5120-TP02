@@ -56,7 +56,7 @@ def test_latest_readings_uses_pr14_sensory_table_for_low_and_high(db_session):
             SensoryReadingRecord(
                 location_id=903,
                 window_end=observed_at,
-                pedestrian_count=0,
+                pedestrian_count=None,
                 sensory_status="No Data",
             ),
         ]
