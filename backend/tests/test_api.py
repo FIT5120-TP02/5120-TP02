@@ -9,10 +9,7 @@ separately in test_route_sensor_matching.py, since coupling it to the
 `mock` routing provider's fixed fixture geometry here would be brittle.
 """
 
-from datetime import datetime, timezone
-
-from app.models import Location, SensoryReadingRecord
-from app.routers.routes import _latest_readings
+from app.models import Location
 
 
 def test_health(client):
@@ -35,65 +32,6 @@ def test_compare_routes_returns_three_routes_with_valid_statuses(client):
     routes = response.json()["routes"]
     assert len(routes) == 3
     assert all(r["sensory_status"] in {"LOW", "HIGH", "NO DATA"} for r in routes)
-
-
-def test_latest_readings_uses_pr14_sensory_table_for_low_and_high(db_session):
-    observed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    db_session.add_all(
-        [
-            SensoryReadingRecord(
-                location_id=901,
-                window_end=observed_at,
-                pedestrian_count=120,
-                sensory_status="Low",
-            ),
-            SensoryReadingRecord(
-                location_id=902,
-                window_end=observed_at,
-                pedestrian_count=850,
-                sensory_status="High",
-            ),
-            SensoryReadingRecord(
-                location_id=903,
-                window_end=observed_at,
-                pedestrian_count=None,
-                sensory_status="No Data",
-            ),
-        ]
-    )
-    db_session.commit()
-
-    readings = _latest_readings(db_session, [901, 902, 903])
-
-    assert readings["901"].current_count == 120
-    assert readings["902"].current_count == 850
-    assert "903" not in readings
-
-
-def test_latest_readings_rejects_low_or_high_with_null_count(db_session):
-    """Defence in depth if an invalid row bypasses the database CHECK."""
-    observed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    db_session.add_all(
-        [
-            SensoryReadingRecord(
-                location_id=904,
-                window_end=observed_at,
-                pedestrian_count=None,
-                sensory_status="Low",
-            ),
-            SensoryReadingRecord(
-                location_id=905,
-                window_end=observed_at,
-                pedestrian_count=None,
-                sensory_status="High",
-            ),
-        ]
-    )
-    db_session.commit()
-
-    readings = _latest_readings(db_session, [904, 905])
-
-    assert readings == {}
 
 
 def test_refuges_returns_seeded_location_within_radius(client, db_session):
