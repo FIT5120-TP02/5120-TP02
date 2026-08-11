@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
-from app.models import Baseline, Location, PedestrianCountMinute
+from app.models import Baseline, Location, PedestrianCountMinute, SensoryReadingRecord
 from app.services import routing_service, sensory_scoring
 from app.services.scoring_config import load_scoring_config
 from app.services.sensory_scoring import (
@@ -51,18 +51,51 @@ def _sensor_locations(db: Session) -> list[SensorLocation]:
 
 def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorReading]:
     """
-    One batched query for "the latest pedestrian_count_minute row per
-    location" (a join against a per-location MAX(sensing_datetime)
-    subquery), rather than one query per sensor.
+    Prefer the latest row from PR #14's ``sensory_reading`` table. LOW/HIGH
+    rows provide a count and observation time that DS3 can score normally;
+    an explicit No Data row remains unavailable. Sensors not yet written to
+    the new table fall back to DS1's existing pedestrian_count_minute table.
     """
     if not location_ids:
         return {}
+
+    latest_sensory = (
+        db.query(
+            SensoryReadingRecord.location_id,
+            func.max(SensoryReadingRecord.window_end).label("latest_dt"),
+        )
+        .filter(SensoryReadingRecord.location_id.in_(location_ids))
+        .group_by(SensoryReadingRecord.location_id)
+        .subquery()
+    )
+    sensory_rows = (
+        db.query(SensoryReadingRecord)
+        .join(
+            latest_sensory,
+            (SensoryReadingRecord.location_id == latest_sensory.c.location_id)
+            & (SensoryReadingRecord.window_end == latest_sensory.c.latest_dt),
+        )
+        .all()
+    )
+    covered_ids = {row.location_id for row in sensory_rows}
+    readings = {
+        str(row.location_id): SensorReading(
+            str(row.location_id), row.pedestrian_count, row.window_end
+        )
+        for row in sensory_rows
+        if row.sensory_status.upper() in {sensory_scoring.LOW, sensory_scoring.HIGH}
+        and row.pedestrian_count >= 0
+    }
+
+    fallback_ids = [location_id for location_id in location_ids if location_id not in covered_ids]
+    if not fallback_ids:
+        return readings
     latest_per_location = (
         db.query(
             PedestrianCountMinute.location_id,
             func.max(PedestrianCountMinute.sensing_datetime).label("latest_dt"),
         )
-        .filter(PedestrianCountMinute.location_id.in_(location_ids))
+        .filter(PedestrianCountMinute.location_id.in_(fallback_ids))
         .group_by(PedestrianCountMinute.location_id)
         .subquery()
     )
@@ -75,13 +108,16 @@ def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorRe
         )
         .all()
     )
-    return {
-        str(row.location_id): SensorReading(
-            str(row.location_id), row.total_of_directions, row.sensing_datetime
-        )
-        for row in rows
-        if row.total_of_directions is not None
-    }
+    readings.update(
+        {
+            str(row.location_id): SensorReading(
+                str(row.location_id), row.total_of_directions, row.sensing_datetime
+            )
+            for row in rows
+            if row.total_of_directions is not None
+        }
+    )
+    return readings
 
 
 def _baselines_for_slot(
