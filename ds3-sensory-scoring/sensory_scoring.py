@@ -93,16 +93,18 @@ def match_sensors_to_route(
     return matched
 
 
-def _is_stale(observed_at: datetime | None, now: datetime, max_age_minutes: int) -> bool:
+def _is_stale(
+    observed_at: datetime | None, now: datetime, max_age_minutes: int
+) -> bool:
     if observed_at is None:
         return True
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=DATABASE_TIMEZONE)
     if now.tzinfo is None:
         now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
-    return now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc) > timedelta(
-        minutes=max_age_minutes
-    )
+    return now.astimezone(timezone.utc) - observed_at.astimezone(
+        timezone.utc
+    ) > timedelta(minutes=max_age_minutes)
 
 
 def melbourne_baseline_slot(when: datetime | None = None) -> tuple[int, int]:
@@ -181,6 +183,25 @@ def load_config(conn) -> ScoringConfig:
     )
 
 
+def _sensor_readings_from_sensory_rows(
+    rows,
+) -> tuple[dict[str, SensorReading], set[str]]:
+    """Convert DS1's sensory_reading rows without trusting invalid NULL counts."""
+    covered_sensor_ids = {str(row["location_id"]) for row in rows}
+    readings = {
+        str(row["location_id"]): SensorReading(
+            str(row["location_id"]),
+            float(row["pedestrian_count"]),
+            row["window_end"],
+        )
+        for row in rows
+        if str(row["sensory_status"]).upper() in {LOW, HIGH}
+        and row["pedestrian_count"] is not None
+        and row["pedestrian_count"] >= 0
+    }
+    return readings, covered_sensor_ids
+
+
 def score_route_from_database(
     geometry: Sequence[Sequence[float]], conn, now: datetime | None = None
 ) -> tuple[str, str | None]:
@@ -203,23 +224,44 @@ def score_route_from_database(
     placeholders = ", ".join(["%s"] * len(matched))
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT p.location_id, p.total_of_directions, p.sensing_datetime "
-            "FROM pedestrian_count_minute p JOIN ("
-            "SELECT location_id, MAX(sensing_datetime) AS newest "
-            f"FROM pedestrian_count_minute WHERE location_id IN ({placeholders}) "
-            "GROUP BY location_id) latest ON latest.location_id = p.location_id "
-            "AND latest.newest = p.sensing_datetime",
+            "SELECT sr.location_id, sr.pedestrian_count, sr.window_end, "
+            "sr.sensory_status FROM sensory_reading sr JOIN ("
+            "SELECT location_id, MAX(window_end) AS newest "
+            f"FROM sensory_reading WHERE location_id IN ({placeholders}) "
+            "GROUP BY location_id) latest ON latest.location_id = sr.location_id "
+            "AND latest.newest = sr.window_end",
             matched,
         )
-        readings = {
-            str(row["location_id"]): SensorReading(
-                str(row["location_id"]),
-                float(row["total_of_directions"]),
-                row["sensing_datetime"],
+        readings, covered_sensor_ids = _sensor_readings_from_sensory_rows(
+            cursor.fetchall()
+        )
+
+        fallback_ids = [
+            sensor_id for sensor_id in matched if sensor_id not in covered_sensor_ids
+        ]
+        if fallback_ids:
+            fallback_placeholders = ", ".join(["%s"] * len(fallback_ids))
+            cursor.execute(
+                "SELECT p.location_id, p.total_of_directions, p.sensing_datetime "
+                "FROM pedestrian_count_minute p JOIN ("
+                "SELECT location_id, MAX(sensing_datetime) AS newest "
+                "FROM pedestrian_count_minute "
+                f"WHERE location_id IN ({fallback_placeholders}) "
+                "GROUP BY location_id) latest ON latest.location_id = p.location_id "
+                "AND latest.newest = p.sensing_datetime",
+                fallback_ids,
             )
-            for row in cursor.fetchall()
-            if row["total_of_directions"] is not None
-        }
+            readings.update(
+                {
+                    str(row["location_id"]): SensorReading(
+                        str(row["location_id"]),
+                        float(row["total_of_directions"]),
+                        row["sensing_datetime"],
+                    )
+                    for row in cursor.fetchall()
+                    if row["total_of_directions"] is not None
+                }
+            )
 
         score_time = now or datetime.now(MELBOURNE_TIMEZONE)
         baseline_weekday, baseline_hour = melbourne_baseline_slot(score_time)
@@ -256,7 +298,9 @@ def main():
         raise SystemExit("Database password cannot be empty.")
 
     conn = pymysql.connect(
-        host=os.environ.get("DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"),
+        host=os.environ.get(
+            "DB_HOST", "tp02fit5120.c1qymwwke45u.ap-southeast-2.rds.amazonaws.com"
+        ),
         port=int(os.environ.get("DB_PORT", "3306")),
         user=os.environ.get("DB_USER", "admin"),
         password=password,
