@@ -257,8 +257,7 @@ def _representative_sensor(
     # divide-by-zero guard is needed.
     return max(
         sensor_ids,
-        key=lambda sensor_id: readings[sensor_id].current_count
-        / baselines[sensor_id].median_count,
+        key=lambda sensor_id: readings[sensor_id].current_count / baselines[sensor_id].median_count,
     )
 
 

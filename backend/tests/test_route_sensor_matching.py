@@ -242,9 +242,7 @@ class TestRepresentativeSensor:
             "smaller_raw_is_high": SensorBaseline("smaller_raw_is_high", 50, 20),
         }
 
-        representative = _representative_sensor(
-            HIGH, list(readings), readings, baselines, config
-        )
+        representative = _representative_sensor(HIGH, list(readings), readings, baselines, config)
 
         assert representative == "smaller_raw_is_high"
 
