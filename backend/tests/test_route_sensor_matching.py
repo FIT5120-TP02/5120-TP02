@@ -26,6 +26,7 @@ def test_sensor_locations_only_returns_sensor_type_rows(db_session):
                 latitude=-37.81,
                 longitude=144.96,
                 location_type="sensor",
+                placement="Outdoor",
             ),
             Location(
                 location_id=9002,
@@ -44,6 +45,43 @@ def test_sensor_locations_only_returns_sensor_type_rows(db_session):
 
     assert "9001" in sensor_ids
     assert "9002" not in sensor_ids
+
+
+def test_sensor_locations_excludes_indoor_placement(db_session):
+    # Confirmed against the live DB on 2026-08-11: all 34 Indoor sensors
+    # (libraries, community hubs, visitor centres) have zero rows in
+    # pedestrian_count_minute/_hour/baseline - Melbourne's public counting
+    # datasets only cover outdoor street-level sensors. Matching one of
+    # these "ghost" sensors used to permanently stick a route's
+    # sensory_status at NO DATA via score_route()'s all-matched-sensors
+    # rule, even when every real outdoor sensor nearby was fine.
+    db_session.add_all(
+        [
+            Location(
+                location_id=9003,
+                location_name="An outdoor sensor",
+                latitude=-37.81,
+                longitude=144.96,
+                location_type="sensor",
+                placement="Outdoor",
+            ),
+            Location(
+                location_id=9004,
+                location_name="An indoor sensor (never reports data)",
+                latitude=-37.81,
+                longitude=144.96,
+                location_type="sensor",
+                placement="Indoor",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    sensors = _sensor_locations(db_session)
+    sensor_ids = {s.sensor_id for s in sensors}
+
+    assert "9003" in sensor_ids
+    assert "9004" not in sensor_ids
 
 
 def test_latest_readings_picks_the_most_recent_row_per_location(db_session):
@@ -133,6 +171,7 @@ def test_match_sensors_to_route_still_wired_through_correctly(db_session):
             latitude=-37.8100,
             longitude=144.9600,
             location_type="sensor",
+            placement="Outdoor",
         )
     )
     db_session.commit()

@@ -13,10 +13,65 @@ from sensory_scoring import (
     SensorBaseline,
     SensorLocation,
     SensorReading,
+    _sensor_readings_from_sensory_rows,
     match_sensors_to_route,
     melbourne_baseline_slot,
     score_route,
 )
+
+
+class SensoryReadingTableTests(unittest.TestCase):
+    def setUp(self):
+        self.observed_at = datetime(2026, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_low_and_high_rows_are_loaded(self):
+        readings, covered = _sensor_readings_from_sensory_rows(
+            [
+                {
+                    "location_id": 1,
+                    "pedestrian_count": 120,
+                    "window_end": self.observed_at,
+                    "sensory_status": "Low",
+                },
+                {
+                    "location_id": 2,
+                    "pedestrian_count": 850,
+                    "window_end": self.observed_at,
+                    "sensory_status": "High",
+                },
+            ]
+        )
+
+        self.assertEqual(readings["1"].current_count, 120)
+        self.assertEqual(readings["2"].current_count, 850)
+        self.assertEqual(covered, {"1", "2"})
+
+    def test_no_data_and_invalid_null_low_high_are_excluded(self):
+        readings, covered = _sensor_readings_from_sensory_rows(
+            [
+                {
+                    "location_id": 3,
+                    "pedestrian_count": None,
+                    "window_end": self.observed_at,
+                    "sensory_status": "No Data",
+                },
+                {
+                    "location_id": 4,
+                    "pedestrian_count": None,
+                    "window_end": self.observed_at,
+                    "sensory_status": "Low",
+                },
+                {
+                    "location_id": 5,
+                    "pedestrian_count": None,
+                    "window_end": self.observed_at,
+                    "sensory_status": "High",
+                },
+            ]
+        )
+
+        self.assertEqual(readings, {})
+        self.assertEqual(covered, {"3", "4", "5"})
 
 
 class SensorMatchingTests(unittest.TestCase):
