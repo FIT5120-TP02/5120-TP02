@@ -108,6 +108,32 @@ class PedestrianCountHour(Base):
     pedestrian_count: Mapped[int | None] = mapped_column(Integer)
 
 
+class Address(Base):
+    """
+    DS's standalone reverse-geocoding table - ~50k real Melbourne
+    addresses with lat/lng, loaded to replace the frontend's old
+    Nominatim reverse-geocoding call. Confirmed via `DESCRIBE address`
+    against the live DB on 2026-08-12. NOT related to `location.address`
+    (that column exists but has never been populated for any row - 0/273
+    - this is a completely separate table DS loaded independently).
+
+    No spatial index on (latitude, longitude) as of writing - `address_pnt`
+    is resolved via a bounding-box prefilter + exact haversine distance in
+    Python (see app/routers/routes.py::_nearest_address), not a DB-side
+    nearest-neighbour query.
+    """
+
+    __tablename__ = "address"
+
+    address_id: Mapped[int] = mapped_column(primary_key=True)
+    address_pnt: Mapped[str] = mapped_column(String(255), nullable=False)
+    street_no: Mapped[str | None] = mapped_column(String(20))
+    str_name: Mapped[str | None] = mapped_column(String(255))
+    suburb: Mapped[str | None] = mapped_column(String(100))
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class Config(Base):
     """
     Key/value tuning table DS2 writes to (route_buffer_radius_m,
