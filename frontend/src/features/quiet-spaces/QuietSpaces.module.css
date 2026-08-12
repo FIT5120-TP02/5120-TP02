@@ -124,17 +124,29 @@
     grid-template-columns: 1fr;
     gap: 1.25rem;
 }
-@media (min-width: 1024px) {
-    .layout {
-        grid-template-columns: 2fr 3fr;
-    }
+.detailColumn {
+    min-width: 0;
+    order: -1;
 }
-
 .listColumn {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    order: 0;
 }
+@media (min-width: 1024px) {
+    .layout {
+        grid-template-columns: 2fr 3fr;
+    }
+    .detailColumn {
+        order: 0;
+    }
+    .listColumn {
+        order: 0;
+    }
+}
+
+
 .refugeCard {
     display: flex;
     align-items: flex-start;
@@ -210,9 +222,7 @@
     color: #0f766e;
 }
 
-.detailColumn {
-    min-width: 0;
-}
+
 .detailPanel {
     background-color: rgba(255, 255, 255, 0.8);
     border: 1px solid #ffffff;

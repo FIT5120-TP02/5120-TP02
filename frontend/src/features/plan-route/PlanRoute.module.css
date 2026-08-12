@@ -88,15 +88,25 @@
     gap: 1.25rem;
     margin-top: 1.5rem;
 }
-@media (min-width: 1024px) {
-    .planRouteResults {
-        grid-template-columns: 2fr 3fr;
-    }
-}
 .planRouteResultsRight {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    order: -1;
+}
+.planRouteResultsLeft {
+    order: 0;
+}
+@media (min-width: 1024px) {
+    .planRouteResults {
+        grid-template-columns: 2fr 3fr;
+    }
+    .planRouteResultsRight {
+        order: 0;
+    }
+    .planRouteResultsLeft {
+        order: 0;
+    }
 }
 
 .errorText {

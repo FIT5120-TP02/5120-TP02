@@ -1,5 +1,5 @@
 import styles from './PlanRoute.module.css'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet'
 import { fetchRoutes } from './api/fetchRoutes'
 import { resolveLocation } from '../../lib/geocode'
@@ -23,6 +23,20 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
     const [resolvedDestination, setResolvedDestination] = useState(null)
     const [useMyLocation, setUseMyLocation] = useState(true)
     const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
+    const resultsRef = useRef(null)
+
+    function handleSelectRoute(routeID) {
+        setSelectedRouteId(routeID)
+        if(window.innerWidth < 1024 && resultsRef.current) {
+            const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 80
+            window.scrollTo({
+                top: y,
+                behavior: 'smooth',
+                block: 'start'
+            })
+        }
+    }
+
     async function handleSearch(fromText, toText, destinationOverride = null) {
         setLoading(true)
         setError(null)
@@ -111,9 +125,9 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
                 {routes.length > 0 && (
                     <div className={styles.planRouteResults}>
                         <div className={styles.planRouteResultsLeft}>
-                            <RouteList routes={routes} selectedRouteId={selectedRouteId} onSelectRoute={setSelectedRouteId} />
+                            <RouteList routes={routes} selectedRouteId={selectedRouteId} onSelectRoute={handleSelectRoute} />
                         </div>
-                        <div className={styles.planRouteResultsRight}>
+                        <div className={styles.planRouteResultsRight} ref={resultsRef}>
                             <RouteDetail route={selectedRoute} />
                             <RouteMap route={selectedRoute} />
                             <RouteBreakdown route={selectedRoute} />

@@ -142,22 +142,20 @@ export default function Overview({onNavigate}) {
                                     <p>{currentTime}</p>
                                     <SensoryBadge level={sensoryLevel} />
                                 </div>
-                                <div className={styles.DashboardCrowdDensityAlert}>
-                                    {!loading && conditions && (
-                                        <>
-                                            <div className={styles.CrowdContainer}>
-                                                <p>Crowd Density</p>
-                                                <p>{conditions.crowdDensityPct}%</p>
-                                                <p>{conditions.crowdDensityContext}</p>
-                                            </div>
-                                            <div className={styles.AlertContainer}>
-                                                <p>Active Alerts</p>
-                                                <p>{conditions.activeAlertsCount}</p>
-                                                <p>{conditions.activeAlertsContext}</p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
+                                {!loading && conditions && (
+                                    <div className={styles.DashboardCrowdDensityAlert}>
+                                        <div className={styles.CrowdContainer}>
+                                            <p>Crowd Density</p>
+                                            <p>{conditions.crowdDensityPct}%</p>
+                                            <p>{conditions.crowdDensityContext}</p>
+                                        </div>
+                                        <div className={styles.AlertContainer}>
+                                            <p>Active Alerts</p>
+                                            <p>{conditions.activeAlertsCount}</p>
+                                            <p>{conditions.activeAlertsContext}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
