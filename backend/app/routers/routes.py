@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
-from app.models import Baseline, Location, PedestrianCountMinute
+from app.models import Baseline, Location, PedestrianCountHour, PedestrianCountMinute
 from app.services import routing_service, sensory_scoring
 from app.services.scoring_config import load_scoring_config
 from app.services.sensory_scoring import (
@@ -99,6 +99,30 @@ def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorRe
     }
 
 
+def _latest_hourly_counts(db: Session, location_ids: list[int]) -> dict[str, int]:
+    """
+    Latest `pedestrian_count_hour` row per location, for `pedestrian_per_hour`.
+    Matched-sensor lists are small (buffer radius is ~120m), so reducing in
+    Python is simpler than a per-location MAX() subquery here.
+    """
+    if not location_ids:
+        return {}
+    rows = (
+        db.query(PedestrianCountHour)
+        .filter(PedestrianCountHour.location_id.in_(location_ids))
+        .all()
+    )
+    latest: dict[str, tuple] = {}
+    for row in rows:
+        if row.pedestrian_count is None:
+            continue
+        key = str(row.location_id)
+        candidate_key = (row.sensing_date, row.hourday)
+        if key not in latest or candidate_key > latest[key][0]:
+            latest[key] = (candidate_key, row.pedestrian_count)
+    return {location_id: count for location_id, (_, count) in latest.items()}
+
+
 def _baselines_for_slot(
     db: Session, location_ids: list[int], day_of_week: int, hourday: int
 ) -> dict[str, SensorBaseline]:
@@ -131,6 +155,7 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
     now = datetime.now(timezone.utc)
     day_of_week, hourday = melbourne_baseline_slot(now)
     sensors = _sensor_locations(db)
+    sensor_by_id = {sensor.sensor_id: sensor for sensor in sensors}
 
     options: list[schemas.RouteOption] = []
     for candidate in candidates:
@@ -138,6 +163,7 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
         matched_location_ids = [int(sid) for sid in matched_ids]
         readings = _latest_readings(db, matched_location_ids)
         baselines = _baselines_for_slot(db, matched_location_ids, day_of_week, hourday)
+        hourly_counts = _latest_hourly_counts(db, matched_location_ids)
         status, notification = sensory_scoring.score_route(
             matched_ids, readings, baselines, cfg, now
         )
@@ -145,6 +171,29 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
         avoided_corridor = None
         if status == sensory_scoring.HIGH:
             avoided_corridor = candidate.label
+
+        # Surface the matched sensor with the busiest current reading as this
+        # route's representative sensor - it's the one driving sensory_status
+        # (or, for LOW routes, the closest thing to a "worst case" reading).
+        # None when no matched sensor has a usable reading (NO DATA).
+        representative_id = max(
+            readings, key=lambda sensor_id: readings[sensor_id].current_count, default=None
+        )
+
+        sensory_value = None
+        address_pnt = None
+        pedestrian_per_min = None
+        pedestrian_per_hour = None
+        if representative_id is not None:
+            reading = readings[representative_id]
+            sensory_value = reading.current_count
+            pedestrian_per_min = reading.current_count
+            pedestrian_per_hour = hourly_counts.get(representative_id)
+            sensor_location = sensor_by_id.get(representative_id)
+            if sensor_location is not None:
+                address_pnt = schemas.AddressPoint(
+                    lat=sensor_location.latitude, lng=sensor_location.longitude
+                )
 
         options.append(
             schemas.RouteOption(
@@ -156,6 +205,10 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
                 geometry=candidate.geometry,
                 avoided_corridor=avoided_corridor,
                 notification=notification,
+                sensory_value=sensory_value,
+                address_pnt=address_pnt,
+                pedestrian_per_min=pedestrian_per_min,
+                pedestrian_per_hour=pedestrian_per_hour,
             )
         )
 

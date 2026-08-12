@@ -20,6 +20,7 @@ on every VARCHAR column or CREATE TABLE fails at startup.
 """
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -85,6 +86,26 @@ class PedestrianCountMinute(Base):
     direction_1: Mapped[int | None] = mapped_column(Integer)
     direction_2: Mapped[int | None] = mapped_column(Integer)
     total_of_directions: Mapped[int | None] = mapped_column(Integer)
+
+
+class PedestrianCountHour(Base):
+    """
+    Hourly-aggregated pedestrian counts, one row per location per
+    (sensing_date, hourday). Source for `pedestrian_per_hour` in the
+    route-comparison response - not previously mapped here even though
+    DS1's `pedestrian_count_hour` table has existed since migration 001.
+    """
+
+    __tablename__ = "pedestrian_count_hour"
+
+    id: Mapped[int] = mapped_column(BigInteger)
+    location_id: Mapped[int] = mapped_column(ForeignKey("location.location_id"), primary_key=True)
+    sensing_date: Mapped[Date] = mapped_column(Date, primary_key=True)
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    hourday: Mapped[int] = mapped_column(Integer, primary_key=True)
+    direction_1: Mapped[int | None] = mapped_column(Integer)
+    direction_2: Mapped[int | None] = mapped_column(Integer)
+    pedestrian_count: Mapped[int | None] = mapped_column(Integer)
 
 
 class Config(Base):

@@ -19,6 +19,13 @@ class RouteCompareRequest(BaseModel):
     destination_lng: float
 
 
+class AddressPoint(BaseModel):
+    """Lat/lng of the sensor behind a route's sensory reading (for map icons)."""
+
+    lat: float
+    lng: float
+
+
 class RouteOption(BaseModel):
     """One candidate route as shown on the Route comparison screen."""
 
@@ -30,6 +37,13 @@ class RouteOption(BaseModel):
     geometry: list[list[float]]  # [[lat, lng], ...] polyline points
     avoided_corridor: str | None = None
     notification: str | None = None  # text notification per US 1.2
+    # Representative sensor behind sensory_status - the matched sensor with
+    # the highest current reading. None when no matched sensor has data
+    # (sensory_status == "NO DATA").
+    sensory_value: float | None = None  # DS's "pedestrian_count" - the raw current reading
+    address_pnt: AddressPoint | None = None  # location of that sensor
+    pedestrian_per_min: float | None = None  # same reading as sensory_value, for display
+    pedestrian_per_hour: float | None = None  # latest hourly aggregate for that same sensor
 
 
 class RouteCompareResponse(BaseModel):
