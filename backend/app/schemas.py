@@ -30,6 +30,19 @@ class RouteOption(BaseModel):
     geometry: list[list[float]]  # [[lat, lng], ...] polyline points
     avoided_corridor: str | None = None
     notification: str | None = None  # text notification per US 1.2
+    # Representative sensor behind sensory_status - see
+    # app/routers/routes.py::_representative_sensor for the selection rule.
+    # None when no matched sensor has usable data (sensory_status == "NO DATA").
+    sensory_value: float | None = None  # DS's "pedestrian_count" - the raw current reading
+    # Nearest real street address to that sensor, e.g. "23 Mackenzie St,
+    # Melbourne" - resolved against DS's separate `address` table (see
+    # app/routers/routes.py::_nearest_address), NOT `location.address`
+    # (that column exists but has never been populated for any row). Can
+    # be None even when there IS a representative sensor, if nothing in
+    # the `address` table falls within the search radius of it.
+    address_pnt: str | None = None
+    pedestrian_per_min: float | None = None  # same reading as sensory_value, for display
+    pedestrian_per_hour: float | None = None  # latest hourly aggregate for that same sensor
 
 
 class RouteCompareResponse(BaseModel):
