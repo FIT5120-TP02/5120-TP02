@@ -20,6 +20,7 @@ on every VARCHAR column or CREATE TABLE fails at startup.
 """
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -85,6 +86,52 @@ class PedestrianCountMinute(Base):
     direction_1: Mapped[int | None] = mapped_column(Integer)
     direction_2: Mapped[int | None] = mapped_column(Integer)
     total_of_directions: Mapped[int | None] = mapped_column(Integer)
+
+
+class PedestrianCountHour(Base):
+    """
+    Hourly-aggregated pedestrian counts, one row per location per
+    (sensing_date, hourday). Source for `pedestrian_per_hour` in the
+    route-comparison response - not previously mapped here even though
+    DS1's `pedestrian_count_hour` table has existed since migration 001.
+    """
+
+    __tablename__ = "pedestrian_count_hour"
+
+    id: Mapped[int] = mapped_column(BigInteger)
+    location_id: Mapped[int] = mapped_column(ForeignKey("location.location_id"), primary_key=True)
+    sensing_date: Mapped[Date] = mapped_column(Date, primary_key=True)
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    hourday: Mapped[int] = mapped_column(Integer, primary_key=True)
+    direction_1: Mapped[int | None] = mapped_column(Integer)
+    direction_2: Mapped[int | None] = mapped_column(Integer)
+    pedestrian_count: Mapped[int | None] = mapped_column(Integer)
+
+
+class Address(Base):
+    """
+    DS's standalone reverse-geocoding table - ~50k real Melbourne
+    addresses with lat/lng, loaded to replace the frontend's old
+    Nominatim reverse-geocoding call. Confirmed via `DESCRIBE address`
+    against the live DB on 2026-08-12. NOT related to `location.address`
+    (that column exists but has never been populated for any row - 0/273
+    - this is a completely separate table DS loaded independently).
+
+    No spatial index on (latitude, longitude) as of writing - `address_pnt`
+    is resolved via a bounding-box prefilter + exact haversine distance in
+    Python (see app/routers/routes.py::_nearest_address), not a DB-side
+    nearest-neighbour query.
+    """
+
+    __tablename__ = "address"
+
+    address_id: Mapped[int] = mapped_column(primary_key=True)
+    address_pnt: Mapped[str] = mapped_column(String(255), nullable=False)
+    street_no: Mapped[str | None] = mapped_column(String(20))
+    str_name: Mapped[str | None] = mapped_column(String(255))
+    suburb: Mapped[str | None] = mapped_column(String(100))
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class Config(Base):
