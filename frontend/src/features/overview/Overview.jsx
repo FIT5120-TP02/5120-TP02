@@ -86,94 +86,6 @@ export default function Overview({onNavigate}) {
                 </div>
             </div>
             <div className={styles.DashboardContainer}>
-                <div className={styles.DashboardDisplay}>
-                    <div className={styles.DashboardLive}>
-                        <div></div>
-                        <div></div>
-                        <div>
-                            <p>Current Conditions · Melbourne CBD</p>
-                            <div className={styles.DashboardReportBoard}>
-                                <div className={styles.DashboardTimeSensor}>
-                                    <p>{currentTime}</p>
-                                    <SensoryBadge level={sensoryLevel} />
-                                </div>
-                                <div className={styles.DashboardCrowdDensityAlert}>
-                                    {!loading && conditions && (
-                                        <>
-                                            <div className={styles.CrowdContainer}>
-                                                <p>Crowd Density</p>
-                                                <p>{conditions.crowdDensityPct}%</p>
-                                                <p>{conditions.crowdDensityContext}</p>
-                                            </div>
-                                            <div className={styles.AlertContainer}>
-                                                <p>Active Alerts</p>
-                                                <p>{conditions.activeAlertsCount}</p>
-                                                <p>{conditions.activeAlertsContext}</p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className={styles.SensoryThreshold}>
-                        <div>
-                            <p className={styles.ThresholdTitle}>
-                            My Sensory Threshold
-                            </p>
-
-                            <p className={styles.ThresholdSubtitle}>
-                            Alert me when crowd density exceeds this level
-                            </p>
-                        </div>
-
-                        <div>
-                            <div className={styles.ThresholdHeader}>
-                            <span className={styles.ThresholdValue}>
-                                {threshold}%
-                            </span>
-
-                            <span
-                                className={
-                                threshold <= 40
-                                    ? styles.Sensitive
-                                    : threshold <= 65
-                                    ? styles.Balanced
-                                    : styles.Relaxed
-                                }
-                            >
-                                {threshold <= 40
-                                ? 'Very sensitive'
-                                : threshold <= 65
-                                    ? 'Balanced'
-                                    : 'Relaxed'}
-                            </span>
-                            </div>
-
-                            <input
-                            type="range"
-                            min={20}
-                            max={90}
-                            value={threshold}
-                            onChange={(e) => setThreshold(Number(e.target.value))}
-                            className={styles.ThresholdSlider}
-                            />
-
-                            <div className={styles.ThresholdRange}>
-                            <span>20%</span>
-                            <span>90%</span>
-                            </div>
-
-                            <p className={styles.ThresholdDescription}>
-                            {threshold <= 40
-                                ? 'Early warnings and frequent rerouting suggestions.'
-                                : threshold <= 65
-                                ? 'Balanced alerts for moderate crowd sensitivity.'
-                                : 'Only alerted during very high-density situations.'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
                 <div className={styles.routePlanner}>
                     <p className={styles.routePlannerTitle}>
                         Plan a Sensory-Safe Route
@@ -219,7 +131,96 @@ export default function Overview({onNavigate}) {
                         ))}
                     </div>
                 </div>
-                <div className={styles.ForecastNavContainer}>
+                <div className={styles.DashboardDisplay}>
+                    <div className={styles.DashboardLive}>
+                        <div></div>
+                        <div></div>
+                        <div>
+                            <p>Current Conditions · Melbourne CBD</p>
+                            <div className={styles.DashboardReportBoard}>
+                                <div className={styles.DashboardTimeSensor}>
+                                    <p>{currentTime}</p>
+                                    <SensoryBadge level={sensoryLevel} />
+                                </div>
+                                <div className={styles.DashboardCrowdDensityAlert}>
+                                    {!loading && conditions && (
+                                        <>
+                                            <div className={styles.CrowdContainer}>
+                                                <p>Crowd Density</p>
+                                                <p>{conditions.crowdDensityPct}%</p>
+                                                <p>{conditions.crowdDensityContext}</p>
+                                            </div>
+                                            <div className={styles.AlertContainer}>
+                                                <p>Active Alerts</p>
+                                                <p>{conditions.activeAlertsCount}</p>
+                                                <p>{conditions.activeAlertsContext}</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {/* <div className={styles.SensoryThreshold}>
+                        <div>
+                            <p className={styles.ThresholdTitle}>
+                            My Sensory Threshold
+                            </p>
+
+                            <p className={styles.ThresholdSubtitle}>
+                            Alert me when crowd density exceeds this level
+                            </p>
+                        </div>
+
+                        <div>
+                            <div className={styles.ThresholdHeader}>
+                                <span className={styles.ThresholdValue}>
+                                    {threshold}%
+                                </span>
+
+                                <span
+                                    className={
+                                    threshold <= 40
+                                        ? styles.Sensitive
+                                        : threshold <= 65
+                                        ? styles.Balanced
+                                        : styles.Relaxed
+                                    }
+                                >
+                                    {threshold <= 40
+                                    ? 'Very sensitive'
+                                    : threshold <= 65
+                                        ? 'Balanced'
+                                        : 'Relaxed'}
+                                </span>
+                                </div>
+
+                                <input
+                                type="range"
+                                min={20}
+                                max={90}
+                                value={threshold}
+                                onChange={(e) => setThreshold(Number(e.target.value))}
+                                className={styles.ThresholdSlider}
+                                />
+
+                                <div className={styles.ThresholdRange}>
+                                <span>20%</span>
+                                <span>90%</span>
+                            </div>
+
+                            <p className={styles.ThresholdDescription}>
+                            {threshold <= 40
+                                ? 'Early warnings and frequent rerouting suggestions.'
+                                : threshold <= 65
+                                ? 'Balanced alerts for moderate crowd sensitivity.'
+                                : 'Only alerted during very high-density situations.'}
+                            </p>
+                        </div>
+                    </div> */}
+                </div>
+                
+                {/* <div className={styles.ForecastNavContainer}>
                     <div className={styles.forecastChart}>
                         <CrowdForecastChart forecast={forecast}/>
                     </div>
@@ -244,7 +245,7 @@ export default function Overview({onNavigate}) {
                             onClick={() => onNavigate('refuges')}
                         />
                     </div>
-                </div>
+                </div> */}
             </div>
         </>
     )

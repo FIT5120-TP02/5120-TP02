@@ -25,10 +25,10 @@ export default function Header(props) {
                     <button className={props.activeButton === 'Quiet Spaces' ? 'active' : ''} onClick={() => handleButtonClick('Quiet Spaces')}><span>♡ Quiet Spaces</span></button>
 
                 </nav>
-                <div className="header-live-time">
+                {/* <div className="header-live-time">
                     <span></span>
                     <span>Live {liveTime}</span>
-                </div>
+                </div> */}
             </div>
         </header>
     )

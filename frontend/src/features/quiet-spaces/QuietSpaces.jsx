@@ -66,7 +66,6 @@ export default function QuietSpaces({onNavigate}) {
             }
             return (b.sensoryScore ?? 0) - (a.sensoryScore ?? 0)
         })
-
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
     return (
         <>

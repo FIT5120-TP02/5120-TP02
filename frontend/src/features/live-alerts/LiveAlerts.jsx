@@ -119,7 +119,7 @@ const FILTERS = [
                                 <span className={styles.clearText}>
                                 Expected to clear: <strong>{alert.predictedEnd}</strong>
                                 </span>
-                                <button className={styles.avoidButton}>Avoid this area →</button>
+                                {/* <button className={styles.avoidButton}>Avoid this area →</button> */}
                             </div>
                             </div>
                         )}
@@ -159,7 +159,7 @@ const FILTERS = [
                         </div>
                     </div>
 
-                    <div className={styles.notifyPanel}>
+                    {/* <div className={styles.notifyPanel}>
                         <p className={styles.notifyTitle}>Push Notifications</p>
                         <p className={styles.notifySubtitle}>Get alerted before stressors reach your threshold.</p>
                         <div className={styles.notifyOptions}>
@@ -171,7 +171,7 @@ const FILTERS = [
                             ))}
                         </div>
                         <button className={styles.saveButton}>Save notification preferences</button>
-                    </div>
+                    </div> */}
                 </div>
             </div>
         </div>
