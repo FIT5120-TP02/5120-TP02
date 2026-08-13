@@ -27,3 +27,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+
+# Python bytecode
+__pycache__/
+*.py[cod]
