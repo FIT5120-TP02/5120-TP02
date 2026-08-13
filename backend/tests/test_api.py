@@ -466,3 +466,53 @@ def test_compare_routes_pedestrian_per_hour_sums_trailing_60_minutes(client, db_
     for route in routes:
         assert route["pedestrian_per_min"] == 40
         assert route["pedestrian_per_hour"] == 55  # 40 + 15; the 999 stale row excluded
+
+
+def test_compare_routes_scores_on_the_hour_not_on_a_single_minute(client, db_session):
+    """The status must follow the trailing hour, not the newest minute alone.
+
+    DS2 calibrated absolute_threshold (500) on `pedestrian_count_hour`, so
+    scoring a single minute against it was ~60x too small - across 18,992
+    live minute-readings exactly one ever reached 500. This sensor's latest
+    minute is far under the threshold while its hour is over it, so the two
+    behaviours give different answers and only the correct one passes.
+    """
+    lat, lng = -37.9950, 145.1500
+    now = datetime.now(timezone.utc)
+    day_of_week, hourday = melbourne_baseline_slot(now)
+    sensing_dt = now.replace(tzinfo=None)
+
+    _seed_sensor(
+        db_session,
+        9410,
+        lat,
+        lng,
+        name="Busy hour, quiet minute",
+        current_count=120,  # on its own: 120 < 500, would score LOW
+        sensing_dt=sensing_dt,
+        baseline_median=100,  # relative bar = 150
+        day_of_week=day_of_week,
+        hourday=hourday,
+    )
+    # Four more minutes inside the window: 120+120+120+120+120 = 600, which
+    # clears both HIGH conditions (>= 500 absolute, >= 150 relative).
+    for minutes_ago in (10, 20, 30, 40):
+        _add_minute_reading(db_session, 9410, sensing_dt - timedelta(minutes=minutes_ago), 120)
+
+    response = client.post(
+        "/api/routes/compare",
+        json={
+            "origin_lat": lat,
+            "origin_lng": lng,
+            "destination_lat": lat + 0.001,
+            "destination_lng": lng + 0.001,
+        },
+    )
+    assert response.status_code == 200
+    routes = response.json()["routes"]
+    assert routes
+    for route in routes:
+        assert route["sensory_status"] == "HIGH"
+        assert route["sensory_value"] == 600  # the hour, not the minute
+        assert route["pedestrian_per_min"] == 120  # the minute is still reported as-is
+        assert route["pedestrian_per_hour"] == 600

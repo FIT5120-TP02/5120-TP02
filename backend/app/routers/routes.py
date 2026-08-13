@@ -17,6 +17,7 @@ separate `sensors` table) and hand them to DS3's pure
 `match_sensors_to_route()`/`score_route()` functions unchanged.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 
@@ -28,7 +29,6 @@ from app import schemas
 from app.database import get_db
 from app.models import Address, Baseline, Location, PedestrianCountMinute
 from app.services import routing_service, sensory_scoring
-from app.services.geo import haversine_km
 from app.services.scoring_config import load_scoring_config
 from app.services.sensory_scoring import (
     HIGH,
@@ -158,6 +158,31 @@ def _latest_hourly_counts(db: Session, readings: Mapping[str, SensorReading]) ->
     return totals
 
 
+def _hourly_readings(
+    readings: Mapping[str, SensorReading], hourly_counts: Mapping[str, int]
+) -> dict[str, SensorReading]:
+    """The same sensors, measured over an hour instead of over one minute.
+
+    score_route compares current_count against two limits DS2 calibrated on
+    the HOURLY table: absolute_threshold (500) and baseline.median_count *
+    1.5 (ds2-baseline/threshold_analysis.py:20,36). Handing it a single
+    minute made that comparison ~60x too small - across 18,992 live
+    minute-readings exactly one ever reached 500, on one sensor out of 99, so
+    HIGH was not rare, it was unreachable, and every route came back LOW or
+    NO DATA no matter how busy the street was.
+
+    `_latest_hourly_counts` already computes the trailing-hour total for
+    `pedestrian_per_hour`, so this only restates it in the shape score_route
+    takes. observed_at is carried through unchanged - freshness is still
+    judged by when the sensor last reported, not by the window's length.
+    """
+    return {
+        sensor_id: SensorReading(sensor_id, float(total), readings[sensor_id].observed_at)
+        for sensor_id, total in hourly_counts.items()
+        if sensor_id in readings
+    }
+
+
 # Bounding-box half-width for _nearest_address's prefilter, in degrees.
 # ~0.01 deg is a little over 1km at Melbourne's latitude - generous enough
 # that a real nearby address is essentially always inside the box (DS's
@@ -177,27 +202,36 @@ def _nearest_address(db: Session, lat: float, lng: float) -> str | None:
     row (0/273, confirmed against the live DB) - `address` is a separate
     table DS loaded independently.
 
-    No spatial index on (latitude, longitude) as of writing, so this does a
-    plain lat/lng bounding-box prefilter (cheap even on ~50k rows) then an
-    exact haversine distance in Python for the final pick - simpler than
-    teaching MySQL spatial functions for what's only ever a handful of
-    lookups per request (one per route's representative sensor). Returns
-    None if nothing at all falls inside the box (nothing to reasonably
+    There is no index on (latitude, longitude), so the box filter cannot be
+    served by one - EXPLAIN reports `type: ALL` over all 48,762 rows either
+    way. What matters is how many rows come BACK. Ranking in Python meant
+    shipping every row in the box to the app and building an ORM object for
+    each: in the CBD that box holds 13,154 addresses, and this runs once per
+    candidate route. On the deployed instance a single /compare took 79
+    seconds, against 0.5s for endpoints reading the same database. Ordering
+    in SQL returns one row instead.
+
+    Returns None if nothing falls inside the box (nothing to reasonably
     guess an address from).
     """
     box = _ADDRESS_SEARCH_BOX_DEG
-    rows = (
-        db.query(Address)
+    # A degree of longitude is shorter than a degree of latitude (~0.79x at
+    # Melbourne), so raw degree distance would stretch "nearest" east-west.
+    # Scale longitude by cos(lat). Squared, to keep this to arithmetic every
+    # backend understands - MySQL in production, SQLite under test.
+    lng_scale = math.cos(math.radians(lat)) ** 2
+    lat_delta = Address.latitude - lat
+    lng_delta = Address.longitude - lng
+    row = (
+        db.query(Address.address_pnt)
         .filter(
             Address.latitude.between(lat - box, lat + box),
             Address.longitude.between(lng - box, lng + box),
         )
-        .all()
+        .order_by(lat_delta * lat_delta + lng_delta * lng_delta * lng_scale)
+        .first()
     )
-    if not rows:
-        return None
-    nearest = min(rows, key=lambda row: haversine_km(lat, lng, row.latitude, row.longitude))
-    return nearest.address_pnt
+    return row[0] if row else None
 
 
 def _baselines_for_slot(
@@ -310,24 +344,26 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
         readings = _latest_readings(db, matched_location_ids)
         baselines = _baselines_for_slot(db, matched_location_ids, day_of_week, hourday)
         hourly_counts = _latest_hourly_counts(db, readings)
-        status, notification = sensory_scoring.score_route(
-            matched_ids, readings, baselines, cfg, now
-        )
+        # Scored on the hourly figure, because that is the unit DS2's
+        # thresholds are in. `readings` stays per-minute for display below.
+        scored = _hourly_readings(readings, hourly_counts)
+        status, notification = sensory_scoring.score_route(matched_ids, scored, baselines, cfg, now)
 
         avoided_corridor = None
         if status == sensory_scoring.HIGH:
             avoided_corridor = candidate.label
 
-        representative_id = _representative_sensor(status, matched_ids, readings, baselines, cfg)
+        representative_id = _representative_sensor(status, matched_ids, scored, baselines, cfg)
 
         sensory_value = None
         address_pnt = None
         pedestrian_per_min = None
         pedestrian_per_hour = None
         if representative_id is not None:
-            reading = readings[representative_id]
-            sensory_value = reading.current_count
-            pedestrian_per_min = reading.current_count
+            # sensory_value is the number the status was decided on, so it
+            # follows the scored figure rather than the raw minute.
+            sensory_value = scored[representative_id].current_count
+            pedestrian_per_min = readings[representative_id].current_count
             pedestrian_per_hour = hourly_counts.get(representative_id)
             sensor_location = sensor_by_id.get(representative_id)
             if sensor_location is not None:
