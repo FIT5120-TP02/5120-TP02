@@ -32,6 +32,7 @@ SELECTED_MIN_OBSERVATIONS = 10
 # DATA CLASSES
 # ==========================================================
 
+
 @dataclass(frozen=True)
 class SensorLocation:
     sensor_id: str
@@ -66,6 +67,7 @@ class ScoringConfig:
 # ROUTE SENSOR MATCHING
 # ==========================================================
 
+
 def _point_segment_distance_m(
     point,
     start,
@@ -77,42 +79,21 @@ def _point_segment_distance_m(
     Suitable for short routes within Melbourne CBD.
     """
 
-    reference_lat = math.radians(
-        (
-            point[0]
-            + start[0]
-            + end[0]
-        )
-        / 3
-    )
+    reference_lat = math.radians((point[0] + start[0] + end[0]) / 3)
 
     metres_per_degree_lat = 111_320.0
 
-    metres_per_degree_lng = (
-        metres_per_degree_lat
-        * math.cos(reference_lat)
-    )
+    metres_per_degree_lng = metres_per_degree_lat * math.cos(reference_lat)
 
-    px = (
-        point[1] - start[1]
-    ) * metres_per_degree_lng
+    px = (point[1] - start[1]) * metres_per_degree_lng
 
-    py = (
-        point[0] - start[0]
-    ) * metres_per_degree_lat
+    py = (point[0] - start[0]) * metres_per_degree_lat
 
-    ex = (
-        end[1] - start[1]
-    ) * metres_per_degree_lng
+    ex = (end[1] - start[1]) * metres_per_degree_lng
 
-    ey = (
-        end[0] - start[0]
-    ) * metres_per_degree_lat
+    ey = (end[0] - start[0]) * metres_per_degree_lat
 
-    length_squared = (
-        ex * ex
-        + ey * ey
-    )
+    length_squared = ex * ex + ey * ey
 
     if length_squared == 0:
         return math.hypot(
@@ -124,11 +105,7 @@ def _point_segment_distance_m(
         0.0,
         min(
             1.0,
-            (
-                px * ex
-                + py * ey
-            )
-            / length_squared,
+            (px * ex + py * ey) / length_squared,
         ),
     )
 
@@ -148,9 +125,7 @@ def match_sensors_to_route(
     """
 
     if buffer_radius_m < 0:
-        raise ValueError(
-            "buffer_radius_m cannot be negative"
-        )
+        raise ValueError("buffer_radius_m cannot be negative")
 
     if len(geometry) < 2:
         return []
@@ -177,21 +152,13 @@ def match_sensors_to_route(
                 segment_start,
                 segment_end,
             )
-            for segment_start, segment_end
-            in pairwise(points)
+            for segment_start, segment_end in pairwise(points)
         )
 
-        if (
-            distance <= buffer_radius_m
-            and sensor.sensor_id not in seen
-        ):
-            matched.append(
-                sensor.sensor_id
-            )
+        if distance <= buffer_radius_m and sensor.sensor_id not in seen:
+            matched.append(sensor.sensor_id)
 
-            seen.add(
-                sensor.sensor_id
-            )
+            seen.add(sensor.sensor_id)
 
     return matched
 
@@ -199,6 +166,7 @@ def match_sensors_to_route(
 # ==========================================================
 # TIME HELPERS
 # ==========================================================
+
 
 def _is_stale(
     observed_at: datetime | None,
@@ -211,23 +179,14 @@ def _is_stale(
         return True
 
     if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(
-            tzinfo=MELBOURNE_TIMEZONE
-        )
+        observed_at = observed_at.replace(tzinfo=MELBOURNE_TIMEZONE)
 
     if now.tzinfo is None:
-        now = now.replace(
-            tzinfo=MELBOURNE_TIMEZONE
-        )
+        now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
 
-    age = (
-        now.astimezone(timezone.utc)
-        - observed_at.astimezone(timezone.utc)
-    )
+    age = now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc)
 
-    return age > timedelta(
-        minutes=max_age_minutes
-    )
+    return age > timedelta(minutes=max_age_minutes)
 
 
 def melbourne_baseline_slot(
@@ -245,21 +204,12 @@ def melbourne_baseline_slot(
     Sunday = 6
     """
 
-    value = (
-        when
-        or datetime.now(
-            MELBOURNE_TIMEZONE
-        )
-    )
+    value = when or datetime.now(MELBOURNE_TIMEZONE)
 
     if value.tzinfo is None:
-        value = value.replace(
-            tzinfo=MELBOURNE_TIMEZONE
-        )
+        value = value.replace(tzinfo=MELBOURNE_TIMEZONE)
     else:
-        value = value.astimezone(
-            MELBOURNE_TIMEZONE
-        )
+        value = value.astimezone(MELBOURNE_TIMEZONE)
 
     return (
         value.weekday(),
@@ -270,6 +220,7 @@ def melbourne_baseline_slot(
 # ==========================================================
 # LOAD CONFIGURATION
 # ==========================================================
+
 
 def load_config(conn) -> ScoringConfig:
     """
@@ -290,41 +241,33 @@ def load_config(conn) -> ScoringConfig:
             """
         )
 
-        values = {
-            row["config_key"]: row["value"]
-            for row in cursor.fetchall()
-        }
+        values = {row["config_key"]: row["value"] for row in cursor.fetchall()}
 
     return ScoringConfig(
-
         buffer_radius_m=float(
             values.get(
                 "route_buffer_radius_m",
                 120,
             )
         ),
-
         absolute_threshold=float(
             values.get(
                 "absolute_threshold",
                 SELECTED_ABSOLUTE_THRESHOLD,
             )
         ),
-
         minimum_observations=int(
             values.get(
                 "minimum_observations",
                 SELECTED_MIN_OBSERVATIONS,
             )
         ),
-
         minimum_sensors=int(
             values.get(
                 "minimum_route_sensors",
                 1,
             )
         ),
-
         live_max_age_minutes=int(
             values.get(
                 "live_max_age_minutes",
@@ -337,6 +280,7 @@ def load_config(conn) -> ScoringConfig:
 # ==========================================================
 # ROUTE SCORING
 # ==========================================================
+
 
 def score_route(
     matched_sensor_ids: Sequence[str],
@@ -361,13 +305,7 @@ def score_route(
 
     cfg = config or ScoringConfig()
 
-    sensor_ids = list(
-        dict.fromkeys(
-            str(sensor_id)
-            for sensor_id
-            in matched_sensor_ids
-        )
-    )
+    sensor_ids = list(dict.fromkeys(str(sensor_id) for sensor_id in matched_sensor_ids))
 
     if len(sensor_ids) < cfg.minimum_sensors:
         return (
@@ -379,13 +317,9 @@ def score_route(
 
     for sensor_id in sensor_ids:
 
-        reading = readings.get(
-            sensor_id
-        )
+        reading = readings.get(sensor_id)
 
-        baseline = baselines.get(
-            sensor_id
-        )
+        baseline = baselines.get(sensor_id)
 
         if reading is None:
             continue
@@ -401,10 +335,7 @@ def score_route(
         if baseline.median_count <= 0:
             continue
 
-        if (
-            baseline.observation_count
-            < cfg.minimum_observations
-        ):
+        if baseline.observation_count < cfg.minimum_observations:
             continue
 
         valid_sensor_count += 1
@@ -415,16 +346,10 @@ def score_route(
         # Only the current hourly pedestrian count matters.
         # ==================================================
 
-        if (
-            reading.current_count
-            >= cfg.absolute_threshold
-        ):
+        if reading.current_count >= cfg.absolute_threshold:
             return (
                 HIGH,
-                (
-                    "This route includes a corridor "
-                    "with high pedestrian density."
-                ),
+                ("This route includes a corridor " "with high pedestrian density."),
             )
 
     if valid_sensor_count < cfg.minimum_sensors:
@@ -443,6 +368,7 @@ def score_route(
 # SCORE ROUTE FROM DATABASE
 # ==========================================================
 
+
 def score_route_from_database(
     geometry: Sequence[Sequence[float]],
     conn,
@@ -452,9 +378,7 @@ def score_route_from_database(
     Match sensors to a route and score using hourly data.
     """
 
-    cfg = load_config(
-        conn
-    )
+    cfg = load_config(conn)
 
     # ------------------------------------------------------
     # Load sensor locations
@@ -475,15 +399,9 @@ def score_route_from_database(
 
         sensors = [
             SensorLocation(
-                sensor_id=str(
-                    row["location_id"]
-                ),
-                latitude=float(
-                    row["latitude"]
-                ),
-                longitude=float(
-                    row["longitude"]
-                ),
+                sensor_id=str(row["location_id"]),
+                latitude=float(row["latitude"]),
+                longitude=float(row["longitude"]),
             )
             for row in cursor.fetchall()
         ]
@@ -500,16 +418,9 @@ def score_route_from_database(
             None,
         )
 
-    placeholders = ", ".join(
-        ["%s"] * len(matched)
-    )
+    placeholders = ", ".join(["%s"] * len(matched))
 
-    score_time = (
-        now
-        or datetime.now(
-            MELBOURNE_TIMEZONE
-        )
-    )
+    score_time = now or datetime.now(MELBOURNE_TIMEZONE)
 
     current_hour = score_time.hour
 
@@ -564,17 +475,11 @@ def score_route_from_database(
 
         for row in hourly_rows:
 
-            sensor_id = str(
-                row["location_id"]
-            )
+            sensor_id = str(row["location_id"])
 
-            reading_weekday = int(
-                row["day_of_week"]
-            )
+            reading_weekday = int(row["day_of_week"])
 
-            reading_hour = int(
-                row["hourday"]
-            )
+            reading_hour = int(row["hourday"])
 
             observed_at = datetime.combine(
                 row["sensing_date"],
@@ -584,13 +489,9 @@ def score_route_from_database(
                 tzinfo=MELBOURNE_TIMEZONE,
             )
 
-            readings[
-                sensor_id
-            ] = SensorReading(
+            readings[sensor_id] = SensorReading(
                 sensor_id=sensor_id,
-                current_count=float(
-                    row["pedestrian_count"]
-                ),
+                current_count=float(row["pedestrian_count"]),
                 observed_at=observed_at,
             )
 
@@ -611,26 +512,14 @@ def score_route_from_database(
                 ),
             )
 
-            baseline_row = (
-                cursor.fetchone()
-            )
+            baseline_row = cursor.fetchone()
 
             if baseline_row:
 
-                baselines[
-                    sensor_id
-                ] = SensorBaseline(
+                baselines[sensor_id] = SensorBaseline(
                     sensor_id=sensor_id,
-                    median_count=float(
-                        baseline_row[
-                            "median_count"
-                        ]
-                    ),
-                    observation_count=int(
-                        baseline_row[
-                            "observation_count"
-                        ]
-                    ),
+                    median_count=float(baseline_row["median_count"]),
+                    observation_count=int(baseline_row["observation_count"]),
                 )
 
     return score_route(
@@ -645,6 +534,7 @@ def score_route_from_database(
 # ==========================================================
 # MAIN HISTORICAL SENSOR TEST
 # ==========================================================
+
 
 def main():
     """
@@ -663,64 +553,45 @@ def main():
     except ModuleNotFoundError:
 
         raise SystemExit(
-            "pymysql is not installed. "
-            "Run: python -m pip install pymysql"
+            "pymysql is not installed. " "Run: python -m pip install pymysql"
         ) from None
 
     # ------------------------------------------------------
     # Database connection
     # ------------------------------------------------------
 
-    password = os.environ.get(
-        "DB_PASSWORD"
-    )
+    password = os.environ.get("DB_PASSWORD")
 
     if not password:
 
-        password = input(
-            "Database password (visible): "
-        ).strip()
+        password = input("Database password (visible): ").strip()
 
     if not password:
 
-        raise SystemExit(
-            "Database password cannot be empty."
-        )
+        raise SystemExit("Database password cannot be empty.")
 
     conn = pymysql.connect(
-
         host=os.environ.get(
             "DB_HOST",
-            (
-                "tp02fit5120.c1qymwwke45u."
-                "ap-southeast-2.rds.amazonaws.com"
-            ),
+            ("tp02fit5120.c1qymwwke45u." "ap-southeast-2.rds.amazonaws.com"),
         ),
-
         port=int(
             os.environ.get(
                 "DB_PORT",
                 "3306",
             )
         ),
-
         user=os.environ.get(
             "DB_USER",
             "admin",
         ),
-
         password=password,
-
         database=os.environ.get(
             "DB_NAME",
             "onboarding",
         ),
-
         charset="utf8mb4",
-
-        cursorclass=(
-            pymysql.cursors.DictCursor
-        ),
+        cursorclass=(pymysql.cursors.DictCursor),
     )
 
     try:
@@ -729,73 +600,37 @@ def main():
         # 1. LOAD CONFIG
         # ==================================================
 
-        config = load_config(
-            conn
-        )
+        config = load_config(conn)
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
 
-        print(
-            "DS3 SENSORY SCORING"
-        )
+        print("DS3 SENSORY SCORING")
 
-        print(
-            "========================================"
-        )
+        print("========================================")
 
-        print(
-            f"\nHIGH threshold       : "
-            f"{config.absolute_threshold:.0f} "
-            f"pedestrians/hour"
-        )
+        print(f"\nHIGH threshold       : " f"{config.absolute_threshold:.0f} " f"pedestrians/hour")
 
-        print(
-            f"Minimum observations : "
-            f"{config.minimum_observations}"
-        )
+        print(f"Minimum observations : " f"{config.minimum_observations}")
 
-        print(
-            "\nClassification rule:"
-        )
+        print("\nClassification rule:")
 
-        print(
-            f"HIGH = current count >= "
-            f"{config.absolute_threshold:.0f}"
-        )
+        print(f"HIGH = current count >= " f"{config.absolute_threshold:.0f}")
 
-        print(
-            f"LOW  = current count < "
-            f"{config.absolute_threshold:.0f}"
-        )
+        print(f"LOW  = current count < " f"{config.absolute_threshold:.0f}")
 
         # ==================================================
         # 2. GET CURRENT MELBOURNE HOUR
         # ==================================================
 
-        now = datetime.now(
-            MELBOURNE_TIMEZONE
-        )
+        now = datetime.now(MELBOURNE_TIMEZONE)
 
-        current_hour = (
-            now.hour
-        )
+        current_hour = now.hour
 
-        print(
-            f"\nCurrent Melbourne time: "
-            f"{now}"
-        )
+        print(f"\nCurrent Melbourne time: " f"{now}")
 
-        print(
-            f"Testing hour: "
-            f"{current_hour:02d}:00"
-        )
+        print(f"Testing hour: " f"{current_hour:02d}:00")
 
-        print(
-            "\nUsing newest available historical "
-            "hourly record for each sensor."
-        )
+        print("\nUsing newest available historical " "hourly record for each sensor.")
 
         # ==================================================
         # 3. LOAD NEWEST HOURLY RECORDS
@@ -863,14 +698,9 @@ def main():
                 ),
             )
 
-            rows = (
-                cursor.fetchall()
-            )
+            rows = cursor.fetchall()
 
-        print(
-            f"\nHourly sensor records loaded: "
-            f"{len(rows)}"
-        )
+        print(f"\nHourly sensor records loaded: " f"{len(rows)}")
 
         # ==================================================
         # 4. SCORE EACH SENSOR
@@ -882,21 +712,13 @@ def main():
 
         for row in rows:
 
-            sensor_id = str(
-                row["location_id"]
-            )
+            sensor_id = str(row["location_id"])
 
-            current_count = row[
-                "current_count"
-            ]
+            current_count = row["current_count"]
 
-            median_count = row[
-                "median_count"
-            ]
+            median_count = row["median_count"]
 
-            observation_count = row[
-                "observation_count"
-            ]
+            observation_count = row["observation_count"]
 
             # ----------------------------------------------
             # Current reading missing
@@ -906,34 +728,17 @@ def main():
 
                 no_data_values.append(
                     {
-                        "sensor_id":
-                            sensor_id,
-
-                        "reason":
-                            "Missing current reading",
-
-                        "sensing_date":
-                            row.get(
-                                "sensing_date"
-                            ),
-
-                        "day_of_week":
-                            row.get(
-                                "day_of_week"
-                            ),
-
-                        "hourday":
-                            row.get(
-                                "hourday"
-                            ),
+                        "sensor_id": sensor_id,
+                        "reason": "Missing current reading",
+                        "sensing_date": row.get("sensing_date"),
+                        "day_of_week": row.get("day_of_week"),
+                        "hourday": row.get("hourday"),
                     }
                 )
 
                 continue
 
-            current_count = float(
-                current_count
-            )
+            current_count = float(current_count)
 
             # ----------------------------------------------
             # Baseline information
@@ -944,59 +749,29 @@ def main():
 
             if median_count is not None:
 
-                median_count = float(
-                    median_count
-                )
+                median_count = float(median_count)
 
             if observation_count is not None:
 
-                observation_count = int(
-                    observation_count
-                )
+                observation_count = int(observation_count)
 
-            if (
-                median_count is not None
-                and median_count > 0
-            ):
+            if median_count is not None and median_count > 0:
 
-                ratio = (
-                    current_count
-                    / median_count
-                )
+                ratio = current_count / median_count
 
             else:
 
                 ratio = None
 
             result = {
-
-                "sensor_id":
-                    sensor_id,
-
-                "current_count":
-                    current_count,
-
-                "median_count":
-                    median_count,
-
-                "ratio":
-                    ratio,
-
-                "observation_count":
-                    observation_count,
-
-                "sensing_date":
-                    row["sensing_date"],
-
-                "day_of_week":
-                    int(
-                        row["day_of_week"]
-                    ),
-
-                "hourday":
-                    int(
-                        row["hourday"]
-                    ),
+                "sensor_id": sensor_id,
+                "current_count": current_count,
+                "median_count": median_count,
+                "ratio": ratio,
+                "observation_count": observation_count,
+                "sensing_date": row["sensing_date"],
+                "day_of_week": int(row["day_of_week"]),
+                "hourday": int(row["hourday"]),
             }
 
             # ==================================================
@@ -1009,20 +784,13 @@ def main():
             # Median and ratio do NOT affect classification.
             # ==================================================
 
-            if (
-                current_count
-                >= config.absolute_threshold
-            ):
+            if current_count >= config.absolute_threshold:
 
-                high_values.append(
-                    result
-                )
+                high_values.append(result)
 
             else:
 
-                low_values.append(
-                    result
-                )
+                low_values.append(result)
 
         # ==================================================
         # PRINT FUNCTION
@@ -1030,24 +798,12 @@ def main():
 
         def print_sensor(row):
 
-            median_text = (
-                f"{row['median_count']:.1f}"
-                if row["median_count"] is not None
-                else "N/A"
-            )
+            median_text = f"{row['median_count']:.1f}" if row["median_count"] is not None else "N/A"
 
-            ratio_text = (
-                f"{row['ratio']:.2f}"
-                if row["ratio"] is not None
-                else "N/A"
-            )
+            ratio_text = f"{row['ratio']:.2f}" if row["ratio"] is not None else "N/A"
 
             observations_text = (
-                str(
-                    row["observation_count"]
-                )
-                if row["observation_count"] is not None
-                else "N/A"
+                str(row["observation_count"]) if row["observation_count"] is not None else "N/A"
             )
 
             print(
@@ -1072,83 +828,55 @@ def main():
         # 5. HIGH VALUES
         # ==================================================
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
 
-        print(
-            "HIGH VALUES"
-        )
+        print("HIGH VALUES")
 
-        print(
-            "========================================"
-        )
+        print("========================================")
 
         if not high_values:
 
-            print(
-                "No HIGH sensors found."
-            )
+            print("No HIGH sensors found.")
 
         else:
 
             for row in high_values:
 
-                print_sensor(
-                    row
-                )
+                print_sensor(row)
 
         # ==================================================
         # 6. LOW VALUES
         # ==================================================
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
 
-        print(
-            "LOW VALUES"
-        )
+        print("LOW VALUES")
 
-        print(
-            "========================================"
-        )
+        print("========================================")
 
         if not low_values:
 
-            print(
-                "No LOW sensors found."
-            )
+            print("No LOW sensors found.")
 
         else:
 
             for row in low_values:
 
-                print_sensor(
-                    row
-                )
+                print_sensor(row)
 
         # ==================================================
         # 7. NO DATA
         # ==================================================
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
 
-        print(
-            "NO DATA"
-        )
+        print("NO DATA")
 
-        print(
-            "========================================"
-        )
+        print("========================================")
 
         if not no_data_values:
 
-            print(
-                "No missing sensor readings."
-            )
+            print("No missing sensor readings.")
 
         else:
 
@@ -1171,37 +899,19 @@ def main():
         # 8. SUMMARY
         # ==================================================
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
 
-        print(
-            "SUMMARY"
-        )
+        print("SUMMARY")
 
-        print(
-            "========================================"
-        )
+        print("========================================")
 
-        print(
-            f"HIGH    : "
-            f"{len(high_values)}"
-        )
+        print(f"HIGH    : " f"{len(high_values)}")
 
-        print(
-            f"LOW     : "
-            f"{len(low_values)}"
-        )
+        print(f"LOW     : " f"{len(low_values)}")
 
-        print(
-            f"NO DATA : "
-            f"{len(no_data_values)}"
-        )
+        print(f"NO DATA : " f"{len(no_data_values)}")
 
-        print(
-            f"TOTAL   : "
-            f"{len(rows)}"
-        )
+        print(f"TOTAL   : " f"{len(rows)}")
 
     finally:
 
