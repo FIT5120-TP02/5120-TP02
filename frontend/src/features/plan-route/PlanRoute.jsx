@@ -48,6 +48,7 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
     async function handleSearch(fromText, toText, destinationOverride = null) {
         setLoading(true)
         setError(null)
+        setMaxSensoryLevel('high')
         try {
             const origin = (useMyLocation && userLocation)
                 ? { name: 'My Location', ...userLocation }
