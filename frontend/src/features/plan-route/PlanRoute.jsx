@@ -52,7 +52,7 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
             const origin = (useMyLocation && userLocation)
                 ? { name: 'My Location', ...userLocation }
                 : await resolveLocation(fromText)
-            const destination = destinationOverride ?? await resolveLocation(toText)
+            const destination = destinationOverride ?? resolvedDestination?? await resolveLocation(toText)
 
             if (!isWithinCBD(origin) || !isWithinCBD(destination)) {
                 setError('Senseway currently supports routes within our Melbourne CBD coverage area.')
