@@ -104,9 +104,7 @@ def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorRe
     }
 
 
-def _latest_hourly_counts(
-    db: Session, readings: Mapping[str, SensorReading]
-) -> dict[str, int]:
+def _latest_hourly_counts(db: Session, readings: Mapping[str, SensorReading]) -> dict[str, int]:
     """
     Trailing 60-minute pedestrian total per location, for `pedestrian_per_hour`
     - summed directly from `pedestrian_count_minute`, the same near-real-time
