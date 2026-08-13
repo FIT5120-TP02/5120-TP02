@@ -129,7 +129,10 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
                                     type="text"
                                     id="to"
                                     value={to}
-                                    onChange={(e) => setTo(e.target.value)}
+                                    onChange={(e) => {
+                                        setTo(e.target.value)
+                                        setResolvedDestination(null)
+                                    }}
                                     placeholder="Enter destination"
                                 />
                             </div>
