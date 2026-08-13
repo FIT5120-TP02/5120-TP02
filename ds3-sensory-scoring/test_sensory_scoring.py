@@ -1,6 +1,6 @@
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -245,7 +245,7 @@ class DatabaseRouteScoringTests(unittest.TestCase):
                     {
                         "location_id": 1,
                         "pedestrian_count": 800,
-                        "sensing_date": datetime(2026, 8, 9).date(),
+                        "sensing_date": date(2026, 8, 9),
                         "day_of_week": 6,
                         "hourday": 2,
                     }
