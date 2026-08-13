@@ -134,7 +134,7 @@ class RouteScoringTests(unittest.TestCase):
         readings = {
             "1": SensorReading(
                 sensor_id="1",
-                current_count=700;
+                current_count=700,
                 observed_at=self.now,
             )
         }
