@@ -6,7 +6,20 @@ export const KNOWN_LOCATIONS = {
     'State Library': { lat: -37.8098, lng: 144.9652 },
     'Southern Cross': { lat: -37.8183, lng: 144.9530 },
 }
-
+export const CBD_BOUNDS = {
+    minLat: -37.835,
+    maxLat: -37.795,
+    minLng: 144.935,
+    maxLng: 144.985,
+}
+export function isWithinCBD({ lat, lng }) {
+    return (
+        lat >= CBD_BOUNDS.minLat &&
+        lat <= CBD_BOUNDS.maxLat &&
+        lng >= CBD_BOUNDS.minLng &&
+        lng <= CBD_BOUNDS.maxLng
+    )
+}
 /**
  * Resolves free text into { name, lat, lng }.
  * Checks known locations first (instant, no network call).
