@@ -4,25 +4,39 @@ from pathlib import Path
 import pandas as pd
 
 
-# Add the project root so this script can import the shared db.py.
+# ==========================================================
+# PROJECT SETUP
+# ==========================================================
+
+# Add project root so this script can import shared db.py.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 import db
 
 
-# Thresholds evaluated during exploratory analysis.
+# ==========================================================
+# THRESHOLD SETTINGS
+# ==========================================================
+
+# Relative thresholds tested for both hourly and minute data.
 RELATIVE_THRESHOLDS = [1.25, 1.50, 1.75, 2.00]
+
+# Absolute thresholds tested for HOURLY data only.
 ABSOLUTE_THRESHOLDS = [250, 500, 750, 1000]
 
-# Selected default values based on the historical analysis.
+# Selected hourly defaults from historical analysis.
 SELECTED_RELATIVE_THRESHOLD = 1.50
 SELECTED_ABSOLUTE_THRESHOLD = 500
 SELECTED_MIN_OBSERVATIONS = 10
 
-# Peak periods used to separately evaluate commuter-hour behaviour.
+# Peak commuter periods.
 PEAK_HOURS = [7, 8, 9, 16, 17, 18]
 
+
+# ==========================================================
+# LOAD HOURLY DATA
+# ==========================================================
 
 def load_hourly_data(conn):
     """Load historical hourly pedestrian counts from MySQL."""
@@ -42,7 +56,6 @@ def load_hourly_data(conn):
 
     df = pd.DataFrame(rows)
 
-    # Explicit conversion protects the analysis from unexpected string values.
     numeric_columns = [
         "location_id",
         "day_of_week",
@@ -51,84 +64,252 @@ def load_hourly_data(conn):
     ]
 
     for column in numeric_columns:
-        df[column] = pd.to_numeric(df[column])
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce",
+        )
+
+    df = df.dropna(
+        subset=numeric_columns
+    )
 
     return df
 
 
-def calculate_baseline(df):
-    """
-    Calculate the normal pedestrian level for each sensor, weekday and hour.
+# ==========================================================
+# LOAD PER-MINUTE DATA
+# ==========================================================
 
-    The median is used instead of the mean because it is less affected by
-    occasional unusually large pedestrian-count spikes.
+def load_minute_data(conn):
+    """Load per-minute pedestrian counts from MySQL."""
+
+    query = """
+        SELECT
+            location_id,
+            sensing_datetime,
+            sensing_date,
+            sensing_time,
+            total_of_directions
+        FROM pedestrian_count_minute
+        WHERE total_of_directions IS NOT NULL
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(query)
+        rows = cur.fetchall()
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        return df
+
+    df["location_id"] = pd.to_numeric(
+        df["location_id"],
+        errors="coerce",
+    )
+
+    df["pedestrian_count"] = pd.to_numeric(
+        df["total_of_directions"],
+        errors="coerce",
+    )
+
+    df["sensing_datetime"] = pd.to_datetime(
+        df["sensing_datetime"],
+        errors="coerce",
+    )
+
+    df = df.dropna(
+        subset=[
+            "location_id",
+            "pedestrian_count",
+            "sensing_datetime",
+        ]
+    )
+
+    # Monday = 0, Sunday = 6.
+    df["day_of_week"] = (
+        df["sensing_datetime"].dt.dayofweek
+    )
+
+    df["hourday"] = (
+        df["sensing_datetime"].dt.hour
+    )
+
+    df["minute"] = (
+        df["sensing_datetime"].dt.minute
+    )
+
+    return df
+
+
+# ==========================================================
+# HOURLY BASELINE
+# ==========================================================
+
+def calculate_hourly_baseline(df):
+    """
+    Calculate historical hourly baseline for:
+
+        sensor x weekday x hour
     """
 
     return (
         df.groupby(
-            ["location_id", "day_of_week", "hourday"]
+            [
+                "location_id",
+                "day_of_week",
+                "hourday",
+            ]
         )
         .agg(
-            median_count=("pedestrian_count", "median"),
-            observation_count=("pedestrian_count", "size"),
+            average_count=(
+                "pedestrian_count",
+                "mean",
+            ),
+            median_count=(
+                "pedestrian_count",
+                "median",
+            ),
+            observation_count=(
+                "pedestrian_count",
+                "size",
+            ),
         )
         .reset_index()
     )
 
 
-def prepare_analysis(df, baseline):
-    """
-    Join each historical observation to its corresponding baseline and calculate
-    how large the observation is relative to normal activity.
+# ==========================================================
+# MINUTE BASELINE
+# ==========================================================
 
-        baseline_ratio = pedestrian_count / historical median
+def calculate_minute_baseline(df):
+    """
+    Calculate per-minute baseline for:
+
+        sensor x weekday x hour x minute
+
+    Example:
+        Sensor 1, Monday, 08:15
+    """
+
+    return (
+        df.groupby(
+            [
+                "location_id",
+                "day_of_week",
+                "hourday",
+                "minute",
+            ]
+        )
+        .agg(
+            average_count=(
+                "pedestrian_count",
+                "mean",
+            ),
+            median_count=(
+                "pedestrian_count",
+                "median",
+            ),
+            observation_count=(
+                "pedestrian_count",
+                "size",
+            ),
+        )
+        .reset_index()
+    )
+
+
+# ==========================================================
+# PREPARE ANALYSIS
+# ==========================================================
+
+def prepare_analysis(df, baseline, group_columns):
+    """
+    Join observations with their corresponding baseline.
+
+    baseline_ratio =
+        pedestrian_count / historical median
     """
 
     data = df.merge(
         baseline,
-        on=["location_id", "day_of_week", "hourday"],
+        on=group_columns,
         how="left",
     )
 
-    # A zero median cannot produce a meaningful relative ratio.
-    data = data[data["median_count"] > 0].copy()
+    # Ratios cannot be calculated against zero.
+    data = data[
+        data["median_count"] > 0
+    ].copy()
 
     data["baseline_ratio"] = (
-        data["pedestrian_count"] / data["median_count"]
+        data["pedestrian_count"]
+        / data["median_count"]
     )
 
     return data
 
 
-def analyse_relative_thresholds(data, name):
+# ==========================================================
+# RELATIVE THRESHOLD ANALYSIS
+# ==========================================================
+
+def analyse_relative_thresholds(
+    data,
+    name,
+    thresholds=RELATIVE_THRESHOLDS,
+):
     """Compare candidate relative thresholds."""
 
     results = []
 
-    for threshold in RELATIVE_THRESHOLDS:
-        high = data["baseline_ratio"] >= threshold
+    for threshold in thresholds:
+
+        high = (
+            data["baseline_ratio"]
+            >= threshold
+        )
 
         results.append(
             {
                 "threshold": threshold,
-                "high_records": int(high.sum()),
+                "high_records": int(
+                    high.sum()
+                ),
                 "total_records": len(data),
-                "high_percent": round(high.mean() * 100, 2),
+                "high_percent": round(
+                    high.mean() * 100,
+                    2,
+                ),
             }
         )
 
     results_df = pd.DataFrame(results)
 
-    print(f"\n{name} relative threshold analysis:")
-    print(results_df.to_string(index=False))
+    print(
+        f"\n{name} relative threshold analysis:"
+    )
+
+    print(
+        results_df.to_string(
+            index=False
+        )
+    )
 
     return results_df
 
 
-def analyse_ratio_distribution(data):
-    """Show how observations are distributed relative to their baselines."""
+# ==========================================================
+# BASELINE RATIO DISTRIBUTION
+# ==========================================================
 
-    print("\nBaseline ratio distribution:")
+def analyse_ratio_distribution(data, name):
+    """Display baseline-ratio distribution."""
+
+    print(
+        f"\n{name} baseline ratio distribution:"
+    )
 
     print(
         data["baseline_ratio"].describe(
@@ -143,36 +324,53 @@ def analyse_ratio_distribution(data):
     )
 
 
-def analyse_observation_requirements(baseline):
-    """
-    Compare possible minimum observation requirements.
+# ==========================================================
+# OBSERVATION REQUIREMENTS
+# ==========================================================
 
-    A baseline based on only a few historical records is less reliable than a
-    baseline based on many weeks of observations.
-    """
+def analyse_observation_requirements(
+    baseline,
+    name,
+):
+    """Analyse baseline historical coverage."""
 
-    print("\nMinimum observation analysis:")
+    print(
+        f"\n{name} minimum observation analysis:"
+    )
 
-    for minimum in [5, 10, 20, 30]:
-        valid = baseline["observation_count"] >= minimum
+    for minimum in [
+        5,
+        10,
+        20,
+        30,
+    ]:
+
+        valid = (
+            baseline["observation_count"]
+            >= minimum
+        )
 
         print(
             f"Minimum {minimum:2d}: "
-            f"{valid.sum():,} / {len(baseline):,} "
+            f"{valid.sum():,} / "
+            f"{len(baseline):,} "
             f"({valid.mean() * 100:.2f}%) retained"
         )
 
 
-def analyse_absolute_counts(data):
-    """
-    Examine actual pedestrian volumes.
+# ==========================================================
+# PEDESTRIAN COUNT DISTRIBUTION
+# ==========================================================
 
-    A relative threshold alone can incorrectly flag low-volume periods. For
-    example, increasing from 2 to 4 pedestrians gives a ratio of 2.0 even though
-    the absolute pedestrian volume remains very low.
-    """
+def analyse_absolute_counts(
+    data,
+    name,
+):
+    """Analyse actual pedestrian counts."""
 
-    print("\nAbsolute pedestrian count distribution:")
+    print(
+        f"\n{name} pedestrian count distribution:"
+    )
 
     print(
         data["pedestrian_count"].describe(
@@ -187,16 +385,25 @@ def analyse_absolute_counts(data):
     )
 
     relative_high = data[
-        data["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
+        data["baseline_ratio"]
+        >= SELECTED_RELATIVE_THRESHOLD
     ]
 
     print(
-        "\nPedestrian counts where "
-        f"baseline ratio >= {SELECTED_RELATIVE_THRESHOLD}:"
+        f"\n{name} pedestrian counts where "
+        f"baseline ratio >= "
+        f"{SELECTED_RELATIVE_THRESHOLD}:"
     )
 
+    if relative_high.empty:
+        print("No matching records.")
+
+        return
+
     print(
-        relative_high["pedestrian_count"].describe(
+        relative_high[
+            "pedestrian_count"
+        ].describe(
             percentiles=[
                 0.10,
                 0.25,
@@ -210,210 +417,473 @@ def analyse_absolute_counts(data):
     )
 
 
-def inspect_extreme_ratios(data, limit=20):
-    """
-    Display the largest baseline ratios.
+# ==========================================================
+# EXTREME RATIOS
+# ==========================================================
 
-    This helps identify cases where extremely small historical medians produce
-    very large relative ratios.
-    """
+def inspect_extreme_ratios(
+    data,
+    name,
+    limit=20,
+):
+    """Display observations with the largest baseline ratios."""
+
+    columns = [
+        "location_id",
+        "day_of_week",
+        "hourday",
+    ]
+
+    # Minute exists only for per-minute data.
+    if "minute" in data.columns:
+        columns.append(
+            "minute"
+        )
+
+    columns += [
+        "pedestrian_count",
+        "median_count",
+        "observation_count",
+        "baseline_ratio",
+    ]
 
     extreme = (
-        data[
-            [
-                "location_id",
-                "day_of_week",
-                "hourday",
-                "pedestrian_count",
-                "median_count",
-                "observation_count",
-                "baseline_ratio",
-            ]
-        ]
-        .sort_values("baseline_ratio", ascending=False)
+        data[columns]
+        .sort_values(
+            "baseline_ratio",
+            ascending=False,
+        )
         .head(limit)
     )
 
-    print(f"\nTop {limit} baseline ratios:")
-    print(extreme.to_string(index=False))
+    print(
+        f"\n{name} top {limit} baseline ratios:"
+    )
+
+    print(
+        extreme.to_string(
+            index=False
+        )
+    )
 
 
-def analyse_combined_thresholds(data, name):
+# ==========================================================
+# HOURLY COMBINED THRESHOLD ANALYSIS
+# ==========================================================
+
+def analyse_hourly_combined_thresholds(
+    data,
+    name,
+):
     """
-    Compare absolute thresholds while keeping the selected relative threshold.
+    Test hourly relative + absolute thresholds.
 
-    Candidate HIGH condition:
+    HIGH candidate:
 
-        baseline_ratio >= 1.50
+        ratio >= 1.5
         AND
-        pedestrian_count >= absolute threshold
+        hourly pedestrian count >= absolute threshold
     """
 
     results = []
 
     for absolute_threshold in ABSOLUTE_THRESHOLDS:
+
         high = (
-            data["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
+            data["baseline_ratio"]
+            >= SELECTED_RELATIVE_THRESHOLD
         ) & (
-            data["pedestrian_count"] >= absolute_threshold
+            data["pedestrian_count"]
+            >= absolute_threshold
         )
 
         results.append(
             {
                 "relative_threshold":
                     SELECTED_RELATIVE_THRESHOLD,
+
                 "absolute_threshold":
                     absolute_threshold,
+
                 "high_records":
                     int(high.sum()),
+
                 "total_records":
                     len(data),
+
                 "high_percent":
-                    round(high.mean() * 100, 2),
+                    round(
+                        high.mean() * 100,
+                        2,
+                    ),
             }
         )
 
-    results_df = pd.DataFrame(results)
+    results_df = pd.DataFrame(
+        results
+    )
 
-    print(f"\n{name} combined threshold analysis:")
-    print(results_df.to_string(index=False))
+    print(
+        f"\n{name} combined threshold analysis:"
+    )
+
+    print(
+        results_df.to_string(
+            index=False
+        )
+    )
 
     return results_df
 
 
-def evaluate_selected_defaults(data, name):
-    """
-    Evaluate the selected DS2 default settings.
+# ==========================================================
+# SELECTED HOURLY DEFAULTS
+# ==========================================================
 
-    Records with fewer than the selected number of historical observations are
-    excluded because their baselines are considered insufficiently supported.
-    """
+def evaluate_hourly_defaults(
+    data,
+    name,
+):
+    """Evaluate selected hourly DS2 thresholds."""
 
     valid = data[
-        data["observation_count"] >= SELECTED_MIN_OBSERVATIONS
+        data["observation_count"]
+        >= SELECTED_MIN_OBSERVATIONS
     ].copy()
 
     high = (
-        valid["baseline_ratio"] >= SELECTED_RELATIVE_THRESHOLD
+        valid["baseline_ratio"]
+        >= SELECTED_RELATIVE_THRESHOLD
     ) & (
-        valid["pedestrian_count"] >= SELECTED_ABSOLUTE_THRESHOLD
+        valid["pedestrian_count"]
+        >= SELECTED_ABSOLUTE_THRESHOLD
     )
 
-    print(f"\n{name} selected-default evaluation:")
+    print(
+        f"\n{name} selected-default evaluation:"
+    )
+
     print(
         f"Minimum observations : "
         f"{SELECTED_MIN_OBSERVATIONS}"
     )
+
     print(
         f"Relative threshold   : "
         f"{SELECTED_RELATIVE_THRESHOLD}"
     )
+
     print(
         f"Absolute threshold   : "
         f"{SELECTED_ABSOLUTE_THRESHOLD}"
     )
+
     print(
         f"Valid records        : "
         f"{len(valid):,}"
     )
+
     print(
         f"HIGH records         : "
         f"{int(high.sum()):,}"
     )
+
+    if len(valid) > 0:
+        print(
+            f"HIGH percentage      : "
+            f"{high.mean() * 100:.2f}%"
+        )
+
+
+# ==========================================================
+# HOURLY ANALYSIS
+# ==========================================================
+
+def run_hourly_analysis(conn):
+    """Run complete historical hourly analysis."""
+
+    print("\n========================================")
+    print("HOURLY PEDESTRIAN ANALYSIS")
+    print("========================================")
+
     print(
-        f"HIGH percentage      : "
-        f"{high.mean() * 100:.2f}%"
+        "\nLoading historical hourly pedestrian data..."
+    )
+
+    df = load_hourly_data(
+        conn
+    )
+
+    print(
+        f"Historical hourly records loaded: "
+        f"{len(df):,}"
+    )
+
+    baseline = calculate_hourly_baseline(
+        df
+    )
+
+    print(
+        f"Hourly baseline slots calculated: "
+        f"{len(baseline):,}"
+    )
+
+    print(
+        f"Sensors represented: "
+        f"{baseline['location_id'].nunique()}"
+    )
+
+    print(
+        "\nFirst 20 hourly baseline records:"
+    )
+
+    print(
+        baseline.head(20).to_string(
+            index=False
+        )
+    )
+
+    analysis = prepare_analysis(
+        df,
+        baseline,
+        [
+            "location_id",
+            "day_of_week",
+            "hourday",
+        ],
+    )
+
+    print(
+        f"\nRecords used for hourly analysis: "
+        f"{len(analysis):,}"
+    )
+
+    # All-hour relative analysis.
+    analyse_relative_thresholds(
+        analysis,
+        "All hours",
+    )
+
+    # Peak-hour analysis.
+    peak = analysis[
+        analysis["hourday"].isin(
+            PEAK_HOURS
+        )
+    ].copy()
+
+    analyse_relative_thresholds(
+        peak,
+        "Peak hours",
+    )
+
+    analyse_ratio_distribution(
+        analysis,
+        "Hourly",
+    )
+
+    analyse_observation_requirements(
+        baseline,
+        "Hourly",
+    )
+
+    analyse_absolute_counts(
+        analysis,
+        "Hourly",
+    )
+
+    inspect_extreme_ratios(
+        analysis,
+        "Hourly",
+    )
+
+    # Absolute thresholds apply to hourly data.
+    analyse_hourly_combined_thresholds(
+        analysis,
+        "All hours",
+    )
+
+    analyse_hourly_combined_thresholds(
+        peak,
+        "Peak hours",
+    )
+
+    evaluate_hourly_defaults(
+        analysis,
+        "All hours",
+    )
+
+    evaluate_hourly_defaults(
+        peak,
+        "Peak hours",
     )
 
 
+# ==========================================================
+# MINUTE ANALYSIS
+# ==========================================================
+
+def run_minute_analysis(conn):
+    """Run exploratory analysis on per-minute pedestrian data."""
+
+    print("\n\n========================================")
+    print("PER-MINUTE PEDESTRIAN ANALYSIS")
+    print("========================================")
+
+    print(
+        "\nLoading per-minute pedestrian data..."
+    )
+
+    df = load_minute_data(
+        conn
+    )
+
+    print(
+        f"Minute records loaded: "
+        f"{len(df):,}"
+    )
+
+    if df.empty:
+        print(
+            "No per-minute pedestrian data available."
+        )
+
+        return
+
+    print(
+        f"Sensors represented in minute data: "
+        f"{df['location_id'].nunique()}"
+    )
+
+    print(
+        f"Minute data start: "
+        f"{df['sensing_datetime'].min()}"
+    )
+
+    print(
+        f"Minute data end: "
+        f"{df['sensing_datetime'].max()}"
+    )
+
+    baseline = calculate_minute_baseline(
+        df
+    )
+
+    print(
+        f"\nMinute baseline slots calculated: "
+        f"{len(baseline):,}"
+    )
+
+    print(
+        "\nFirst 20 minute baseline records:"
+    )
+
+    print(
+        baseline.head(20).to_string(
+            index=False
+        )
+    )
+
+    print(
+        "\nMinute baseline observation-count distribution:"
+    )
+
+    print(
+        baseline[
+            "observation_count"
+        ].describe()
+    )
+
+    analysis = prepare_analysis(
+        df,
+        baseline,
+        [
+            "location_id",
+            "day_of_week",
+            "hourday",
+            "minute",
+        ],
+    )
+
+    print(
+        f"\nRecords used for minute analysis: "
+        f"{len(analysis):,}"
+    )
+
+    # Relative analysis across all minute readings.
+    analyse_relative_thresholds(
+        analysis,
+        "All minute readings",
+    )
+
+    # Minute readings occurring during commuter peak hours.
+    peak = analysis[
+        analysis["hourday"].isin(
+            PEAK_HOURS
+        )
+    ].copy()
+
+    analyse_relative_thresholds(
+        peak,
+        "Peak-hour minute readings",
+    )
+
+    analyse_ratio_distribution(
+        analysis,
+        "Per-minute",
+    )
+
+    analyse_observation_requirements(
+        baseline,
+        "Per-minute",
+    )
+
+    analyse_absolute_counts(
+        analysis,
+        "Per-minute",
+    )
+
+    inspect_extreme_ratios(
+        analysis,
+        "Per-minute",
+    )
+
+    print(
+        "\nNOTE:"
+    )
+
+    print(
+        "The hourly absolute threshold of "
+        f"{SELECTED_ABSOLUTE_THRESHOLD} is not applied "
+        "to per-minute readings."
+    )
+
+    print(
+        "Minute-level absolute thresholds should be "
+        "selected separately from the minute data."
+    )
+
+
+# ==========================================================
+# MAIN
+# ==========================================================
+
 def main():
-    """Run the complete DS2 threshold analysis."""
+    """Run hourly and per-minute DS2 threshold analysis."""
 
     conn = db.connect()
 
     try:
-        print("Loading historical pedestrian data...")
 
-        df = load_hourly_data(conn)
-
-        print(
-            f"Historical records loaded: "
-            f"{len(df):,}"
+        run_hourly_analysis(
+            conn
         )
 
-        baseline = calculate_baseline(df)
-
-        print(
-            f"Baseline slots calculated: "
-            f"{len(baseline):,}"
-        )
-
-        analysis = prepare_analysis(
-            df,
-            baseline,
-        )
-
-        print(
-            f"Records used for threshold analysis: "
-            f"{len(analysis):,}"
-        )
-
-        # Compare candidate relative thresholds across all observations.
-        analyse_relative_thresholds(
-            analysis,
-            "All hours",
-        )
-
-        # Analyse peak periods separately because the product specifically
-        # supports commuters travelling during peak hours.
-        peak = analysis[
-            analysis["hourday"].isin(PEAK_HOURS)
-        ].copy()
-
-        analyse_relative_thresholds(
-            peak,
-            "Peak hours",
-        )
-
-        # Examine the distributions behind the threshold decisions.
-        analyse_ratio_distribution(analysis)
-
-        analyse_observation_requirements(
-            baseline
-        )
-
-        analyse_absolute_counts(
-            analysis
-        )
-
-        inspect_extreme_ratios(
-            analysis
-        )
-
-        # Test whether combining relative and absolute thresholds avoids
-        # incorrectly classifying very small pedestrian counts as HIGH.
-        analyse_combined_thresholds(
-            analysis,
-            "All hours",
-        )
-
-        analyse_combined_thresholds(
-            peak,
-            "Peak hours",
-        )
-
-        # Report the currently selected defaults.
-        evaluate_selected_defaults(
-            analysis,
-            "All hours",
-        )
-
-        evaluate_selected_defaults(
-            peak,
-            "Peak hours",
+        run_minute_analysis(
+            conn
         )
 
     finally:
+
         conn.close()
 
 
