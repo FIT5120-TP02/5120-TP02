@@ -9,9 +9,9 @@ port of that same logic rather than a straight call. Same keys, same
 fallback defaults, sourced from the same table, confirmed against the
 live DB on 2026-08-09: only `absolute_threshold`, `minimum_observations`,
 and `relative_threshold` are actually populated right now -
-`route_buffer_radius_m`, `minimum_route_sensors`, and
-`live_max_age_minutes` fall back to ScoringConfig's own defaults until
-DS2 adds rows for them.
+`route_buffer_radius_m`, `minimum_route_sensors`,
+`live_max_age_minutes`, and `crowded_absolute_threshold` fall back to
+ScoringConfig's own defaults until DS2 adds rows for them.
 """
 
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ def load_scoring_config(db: Session) -> ScoringConfig:
         buffer_radius_m=float(values.get("route_buffer_radius_m", 120)),
         relative_threshold=float(values.get("relative_threshold", 1.5)),
         absolute_threshold=float(values.get("absolute_threshold", 500)),
+        crowded_absolute_threshold=float(values.get("crowded_absolute_threshold", 800)),
         minimum_observations=int(values.get("minimum_observations", 10)),
         minimum_sensors=int(values.get("minimum_route_sensors", 1)),
         live_max_age_minutes=int(values.get("live_max_age_minutes", 30)),
