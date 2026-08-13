@@ -1,14 +1,13 @@
 import { transformRouteOption } from './transformRoute'
-
+import { fetchWithTimeout } from '../../../lib/fetchWithTimeout'
 const API_BASE_URL = 'https://five120-tp02.onrender.com'
 
 /**
  * @param {{ 
  * origin: {lat, lng}, 
- * destination: {lat, lng}, 
- * preferenceId?: number }} params
+ * destination: {lat, lng} }} params
  */
-export async function fetchRoutes({ origin, destination, preferenceId }) {
+export async function fetchRoutes({ origin, destination}) {
     try {
         if (origin?.lat == null ||
             origin?.lng == null ||
@@ -16,7 +15,7 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
             destination?.lng == null) {
         throw new Error('Missing coordinates')
         }
-        
+        console.log('Fetch Routes')
         const res = await fetch(`${API_BASE_URL}/api/routes/compare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -25,9 +24,9 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
                 origin_lng: origin.lng,
                 destination_lat: destination.lat,
                 destination_lng: destination.lng,
-                preference_id: preferenceId ?? null,
             }),
-        })
+        }, 20000)
+        
         if (!res.ok) {
             throw new Error(`API returned ${res.status}`)
         }
@@ -42,6 +41,10 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
                 distance: route.distance_km,
                 duration: route.duration_min,
                 sensory_load: route.sensory_status,
+                sensory_val: route.sensory_value,
+                address: route.address_pnt,
+                pedestrian_per_min: route.pedestrian_per_min,
+                pedestrian_per_hour: route.pedestrian_per_hour
             }))
         )
 
@@ -51,7 +54,7 @@ export async function fetchRoutes({ origin, destination, preferenceId }) {
 
         return data.routes.map(transformRouteOption)
     } catch (err) {
-        console.error('[fetchRoutes] Live API unavailable, using mock data:', err)
+        console.error('[fetchRoutes] Live API unavailable:', err.message)
         throw err
     }
 }
