@@ -1,9 +1,8 @@
 import styles from './RouteDetail.module.css'
 
 const LOAD_STYLES = {
-    low: { label: 'Low Load', bg: '#4d7c62', color: '#ffffff' },
-    medium: { label: 'Medium Load', bg: '#fbbf24', color: '#78350f' },
-    high: { label: 'High Load', bg: '#ef4444', color: '#ffffff' },
+    low: { label: 'LOW', bg: '#4d7c62', color: '#ffffff' },
+    high: { label: 'HIGH', bg: '#ef4444', color: '#ffffff' },
 }
 
 export default function RouteDetailPanel({ route }) {
@@ -14,8 +13,8 @@ export default function RouteDetailPanel({ route }) {
         <div className={styles.panel}>
             <div className={styles.headerRow}>
                 <div>
-                <h3 className={styles.name}>{route.name}</h3>
-                {route.waypoints && <p className={styles.via}>{route.waypoints.join(' → ')}</p>}
+                    <h3 className={styles.name}>{route.name}</h3>
+                    {route.waypoints && <p className={styles.via}>{route.waypoints.join(' → ')}</p>}
                 </div>
                 {load && (
                 <span className={styles.badge} style={{ backgroundColor: load.bg, color: load.color }}>
@@ -30,24 +29,24 @@ export default function RouteDetailPanel({ route }) {
 
             <div className={styles.statsGrid}>
                 <div>
-                <p className={styles.statLabel}>Duration</p>
-                <p className={styles.statValue}>{route.durationMin} min</p>
+                    <p className={styles.statLabel}>Duration</p>
+                    <p className={styles.statValue}>{route.durationMin} min</p>
                 </div>
                 <div>
-                <p className={styles.statLabel}>Distance</p>
-                <p className={styles.statValue}>{route.distanceKm} km</p>
+                    <p className={styles.statLabel}>Distance</p>
+                    <p className={styles.statValue}>{route.distanceKm} km</p>
                 </div>
-                {route.crowdDensityPct != null && (
-                <div>
-                    <p className={styles.statLabel}>Crowd density</p>
-                    <p className={styles.statValue}>{route.crowdDensityPct}%</p>
-                </div>
+                {route.pedestrianPerMin != null && (
+                    <div>
+                        <p className={styles.statLabel}>Crowd density</p>
+                        <p className={styles.statValue}>{route.pedestrianPerMin}/min</p>
+                    </div>
                 )}
                 {route.transport && (
-                <div>
-                    <p className={styles.statLabel}>Transport</p>
-                    <p className={styles.statValueSmall}>{route.transport}</p>
-                </div>
+                    <div>
+                        <p className={styles.statLabel}>Transport</p>
+                        <p className={styles.statValueSmall}>{route.transport}</p>
+                    </div>
                 )}
             </div>
         </div>

@@ -1,9 +1,9 @@
 import styles from "./Overview.module.css"
 import { useState, useEffect } from 'react'
 import { fetchConditions } from "./api/fetchConditions";
-import { fetchForecast} from './api/fetchForecast'
+import { useLiveLocation } from "../../lib/liveLocation";
 import { fetchRefuges } from "../quiet-spaces/api/fetchRefuges";
-import CrowdForecastChart from "./components/CrowdForecastChart";
+import { resolveLocation } from '../../lib/geocode'
 import { KNOWN_LOCATIONS } from '../../lib/geocode'
 import NavCard from "./components/NavCard";
 
@@ -14,11 +14,6 @@ const SensoryBadge = ({ level }) => {
             bg: '#f0fdf4',
             text: '#65a30d',
             dot: '#84cc16',
-        },
-        Medium: {
-            bg: '#fef3c7',
-            text: '#f59e0b',
-            dot: '#f59e0b',
         },
         High: {
             bg: '#fee2e2',
@@ -50,17 +45,27 @@ export default function Overview({onNavigate}) {
     const [loading, setLoading] = useState(true)
     const [threshold, setThreshold] = useState(60)
     const [destination, setDestination] = useState('')
-    const [forecast, setForecast] = useState([])
     const [refugeCount, setRefugeCount] = useState(null)
+    const { userLocation, error: locationError, loading: locationLoading } = useLiveLocation()
+    const [hasFetchedConditions, setHasFetchedConditions] = useState(false)
+
     useEffect(() => {
+        if (locationLoading) return // still waiting on GPS, don't fetch yet
+        if (hasFetchedConditions) return // fetch once per page load. To fix issue of multiple fetch on Overview
+
         async function loadConditions() {
-            const data = await fetchConditions()
-            setConditions(data)
-            setLoading(false)
-        }
-        async function loadForecast() {
-            const data = await fetchForecast()
-            setForecast(data)
+            try {
+                setLoading(true)
+                const originPoint = userLocation ?? KNOWN_LOCATIONS['My Location — Melbourne CBD']
+                const data = await fetchConditions(originPoint)
+                console.log('Conditions: ', data)
+                setConditions(data)
+                setHasFetchedConditions(true)
+            } catch (err) {
+                console.log('[Overview] failed to load conditions:', err)
+            } finally {
+                setLoading(false)
+            }
         }
         async function loadRefugeCount() {
             const cbd = KNOWN_LOCATIONS['My Location — Melbourne CBD']
@@ -68,10 +73,8 @@ export default function Overview({onNavigate}) {
             setRefugeCount(data.length)
         }
         loadConditions()
-        loadForecast()
         loadRefugeCount()
-    }, [])
-
+    }, [locationLoading, userLocation?.lat, userLocation?.lng, hasFetchedConditions])
     return (
         <>
             <div className="HeaderContainer">
@@ -86,94 +89,6 @@ export default function Overview({onNavigate}) {
                 </div>
             </div>
             <div className={styles.DashboardContainer}>
-                <div className={styles.DashboardDisplay}>
-                    <div className={styles.DashboardLive}>
-                        <div></div>
-                        <div></div>
-                        <div>
-                            <p>Current Conditions · Melbourne CBD</p>
-                            <div className={styles.DashboardReportBoard}>
-                                <div className={styles.DashboardTimeSensor}>
-                                    <p>{currentTime}</p>
-                                    <SensoryBadge level={sensoryLevel} />
-                                </div>
-                                <div className={styles.DashboardCrowdDensityAlert}>
-                                    {!loading && conditions && (
-                                        <>
-                                            <div className={styles.CrowdContainer}>
-                                                <p>Crowd Density</p>
-                                                <p>{conditions.crowdDensityPct}%</p>
-                                                <p>{conditions.crowdDensityContext}</p>
-                                            </div>
-                                            <div className={styles.AlertContainer}>
-                                                <p>Active Alerts</p>
-                                                <p>{conditions.activeAlertsCount}</p>
-                                                <p>{conditions.activeAlertsContext}</p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className={styles.SensoryThreshold}>
-                        <div>
-                            <p className={styles.ThresholdTitle}>
-                            My Sensory Threshold
-                            </p>
-
-                            <p className={styles.ThresholdSubtitle}>
-                            Alert me when crowd density exceeds this level
-                            </p>
-                        </div>
-
-                        <div>
-                            <div className={styles.ThresholdHeader}>
-                            <span className={styles.ThresholdValue}>
-                                {threshold}%
-                            </span>
-
-                            <span
-                                className={
-                                threshold <= 40
-                                    ? styles.Sensitive
-                                    : threshold <= 65
-                                    ? styles.Balanced
-                                    : styles.Relaxed
-                                }
-                            >
-                                {threshold <= 40
-                                ? 'Very sensitive'
-                                : threshold <= 65
-                                    ? 'Balanced'
-                                    : 'Relaxed'}
-                            </span>
-                            </div>
-
-                            <input
-                            type="range"
-                            min={20}
-                            max={90}
-                            value={threshold}
-                            onChange={(e) => setThreshold(Number(e.target.value))}
-                            className={styles.ThresholdSlider}
-                            />
-
-                            <div className={styles.ThresholdRange}>
-                            <span>20%</span>
-                            <span>90%</span>
-                            </div>
-
-                            <p className={styles.ThresholdDescription}>
-                            {threshold <= 40
-                                ? 'Early warnings and frequent rerouting suggestions.'
-                                : threshold <= 65
-                                ? 'Balanced alerts for moderate crowd sensitivity.'
-                                : 'Only alerted during very high-density situations.'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
                 <div className={styles.routePlanner}>
                     <p className={styles.routePlannerTitle}>
                         Plan a Sensory-Safe Route
@@ -219,32 +134,31 @@ export default function Overview({onNavigate}) {
                         ))}
                     </div>
                 </div>
-                <div className={styles.ForecastNavContainer}>
-                    <div className={styles.forecastChart}>
-                        <CrowdForecastChart forecast={forecast}/>
+                <div className={styles.DashboardDisplay}>
+                    <div className={styles.DashboardLive}>
+                        <div></div>
+                        <div></div>
+                        <div>
+                            <p>Current Conditions · Melbourne CBD</p>
+                            <div className={styles.DashboardReportBoard}>
+                                <div className={styles.DashboardTimeSensor}>
+                                    <p>{currentTime}</p>
+                                    <SensoryBadge level={sensoryLevel} />
+                                </div>
+                                {!loading && conditions?.pedestrianPerHour && (
+                                    <div className={styles.CrowdContainer}>
+                                        <p>Crowd Density</p>
+                                        <p>{conditions.pedestrianPerHour}/Hour</p>
+                                        <p>{conditions.crowdDensityContext}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                    <div className={styles.navCards}>
-                        <NavCard
-                            variant={'alerts'}
-                            icon={'◎'}
-                            title={'Live Alerts'}
-                            subtitle={
-                                conditions ? `${conditions.activeAlertsCount} high-severity stressors active near you` : 'Loading...'
-                            }
-                            onClick={() => onNavigate('alerts')}
-                        />
-                        <NavCard
-                            variant={'refuges'}
-                            icon={'♡'}
-                            title={'Quiet Spaces'}
-                            subtitle={
-                                refugeCount != null
-                                    ? `${refugeCount} sensory refuge${refugeCount === 1 ? '' : 's'} nearby` : 'Loading...'
-                            }
-                            onClick={() => onNavigate('refuges')}
-                        />
-                    </div>
+                    
                 </div>
+                
+                
             </div>
         </>
     )

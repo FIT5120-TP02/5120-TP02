@@ -1,4 +1,4 @@
-// Navigation card to go to Live Alerts and Quiet Spaces
+// Navigation card to go to Quiet Spaces
 import styles from './NavCard.module.css'
 
 export default function NavCard({ variant, icon, title, subtitle, onClick }) {

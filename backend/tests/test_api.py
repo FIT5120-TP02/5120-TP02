@@ -9,9 +9,9 @@ separately in test_route_sensor_matching.py, since coupling it to the
 `mock` routing provider's fixed fixture geometry here would be brittle.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from app.models import Address, Baseline, Location, PedestrianCountHour, PedestrianCountMinute
+from app.models import Address, Baseline, Location, PedestrianCountMinute
 from app.services.sensory_scoring import melbourne_baseline_slot
 
 
@@ -55,6 +55,30 @@ def test_refuges_returns_seeded_location_within_radius(client, db_session):
     refuges = response.json()["refuges"]
     matched = next(r for r in refuges if r["location_id"] == 101)
     assert matched["category"] == "Library"
+    # No address seeded -> falls back to location_name, per DS: location.address
+    # is null for the ~13/92 refuge rows that don't have a real street address.
+    assert matched["address"] == "Test Library"
+
+
+def test_refuges_uses_real_street_address_when_present(client, db_session):
+    db_session.add(
+        Location(
+            location_id=102,
+            location_name="Test Gallery",
+            latitude=-37.8102,
+            longitude=144.9628,
+            address="123 Example St, Melbourne",
+            location_type="refuge",
+            category="Gallery or museum",
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/refuges", params={"lat": -37.8102, "lng": 144.9628})
+    assert response.status_code == 200
+    refuges = response.json()["refuges"]
+    matched = next(r for r in refuges if r["location_id"] == 102)
+    assert matched["address"] == "123 Example St, Melbourne"
 
 
 def test_refuges_returns_empty_list_when_nothing_within_radius(client):
@@ -116,14 +140,20 @@ def _seed_sensor(
     baseline_observations=20,
     day_of_week=None,
     hourday=None,
-    hourly_count=None,
 ):
-    """Seed one Outdoor sensor location, with optional live reading/baseline/
-    hourly-aggregate rows attached (all three are None by default, i.e.
-    "sensor exists but has never reported"). `address`, if given, seeds a
-    matching row in the separate `address` table at the same lat/lng
-    (address_pnt's real source - not location.address, which is never
-    populated - see _nearest_address in app/routers/routes.py)."""
+    """Seed one Outdoor sensor location, with optional live reading/baseline
+    rows attached (both None by default, i.e. "sensor exists but has never
+    reported"). `address`, if given, seeds a matching row in the separate
+    `address` table at the same lat/lng (address_pnt's real source - not
+    location.address, which is never populated - see _nearest_address in
+    app/routers/routes.py).
+
+    `pedestrian_per_hour` is no longer seeded here - it's derived live from
+    `pedestrian_count_minute` (trailing 60 minutes, see
+    app/routers/routes.py::_latest_hourly_counts), so it comes for free from
+    the `current_count`/`sensing_dt` reading below. Use
+    `_add_minute_reading` directly to test the summation/window behaviour
+    itself."""
     db_session.add(
         Location(
             location_id=location_id,
@@ -166,17 +196,22 @@ def _seed_sensor(
                 recomputed_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
         )
-    if hourly_count is not None:
-        db_session.add(
-            PedestrianCountHour(
-                id=location_id * 1000,
-                location_id=location_id,
-                sensing_date=datetime.now(timezone.utc).date(),
-                day_of_week=day_of_week if day_of_week is not None else 0,
-                hourday=hourday if hourday is not None else 0,
-                pedestrian_count=hourly_count,
-            )
+    db_session.commit()
+
+
+def _add_minute_reading(db_session, location_id, sensing_dt, count):
+    """Seed an extra `pedestrian_count_minute` row for a sensor already
+    created via `_seed_sensor`, e.g. to test `pedestrian_per_hour`'s
+    trailing-60-minute summation/window logic directly."""
+    db_session.add(
+        PedestrianCountMinute(
+            location_id=location_id,
+            sensing_datetime=sensing_dt,
+            sensing_date=sensing_dt.date(),
+            sensing_time=sensing_dt.time(),
+            total_of_directions=count,
         )
+    )
     db_session.commit()
 
 
@@ -226,7 +261,6 @@ def test_compare_routes_low_status_picks_sensor_with_highest_ratio_to_baseline(c
         baseline_median=100,  # ratio 0.8
         day_of_week=day_of_week,
         hourday=hourday,
-        hourly_count=8,
     )
     _seed_sensor(
         db_session,
@@ -240,7 +274,6 @@ def test_compare_routes_low_status_picks_sensor_with_highest_ratio_to_baseline(c
         baseline_median=20,  # ratio 2.5
         day_of_week=day_of_week,
         hourday=hourday,
-        hourly_count=15,
     )
 
     response = client.post(
@@ -259,7 +292,11 @@ def test_compare_routes_low_status_picks_sensor_with_highest_ratio_to_baseline(c
         assert route["sensory_status"] == "LOW"
         assert route["sensory_value"] == 50
         assert route["pedestrian_per_min"] == 50
-        assert route["pedestrian_per_hour"] == 15
+        # Only one pedestrian_count_minute row exists for sensor B within the
+        # trailing 60-minute window, so the sum equals that single reading -
+        # see test_compare_routes_pedestrian_per_hour_sums_trailing_60_minutes
+        # for the multi-reading summation/window-boundary behaviour itself.
+        assert route["pedestrian_per_hour"] == 50
         assert route["address_pnt"] == "23 Mackenzie St, Melbourne"
 
 
@@ -315,6 +352,7 @@ def test_compare_routes_high_status_picks_sensor_satisfying_both_conditions(clie
         assert route["sensory_status"] == "HIGH"
         assert route["sensory_value"] == 600
         assert route["pedestrian_per_min"] == 600
+        assert route["pedestrian_per_hour"] == 600
         assert route["address_pnt"] == "88 Little Bourke St, Melbourne"
 
 
@@ -337,7 +375,6 @@ def test_compare_routes_multi_sensor_route_fields_match_the_picked_sensor(client
         baseline_median=100,  # ratio 0.3
         day_of_week=day_of_week,
         hourday=hourday,
-        hourly_count=3,
     )
     _seed_sensor(
         db_session,
@@ -351,7 +388,6 @@ def test_compare_routes_multi_sensor_route_fields_match_the_picked_sensor(client
         baseline_median=40,  # ratio 1.5
         day_of_week=day_of_week,
         hourday=hourday,
-        hourly_count=6,
     )
     _seed_sensor(
         db_session,
@@ -364,7 +400,6 @@ def test_compare_routes_multi_sensor_route_fields_match_the_picked_sensor(client
         baseline_median=90,  # ratio 0.5
         day_of_week=day_of_week,
         hourday=hourday,
-        hourly_count=4,
     )
 
     response = client.post(
@@ -383,5 +418,101 @@ def test_compare_routes_multi_sensor_route_fields_match_the_picked_sensor(client
         assert route["sensory_status"] == "LOW"
         assert route["sensory_value"] == 60
         assert route["pedestrian_per_min"] == 60
-        assert route["pedestrian_per_hour"] == 6
+        # Only sensor 2's own reading counts toward its trailing-60-minute
+        # total - it must not pick up sensor 1's or sensor 3's readings.
+        assert route["pedestrian_per_hour"] == 60
         assert route["address_pnt"] == "10 Flinders Ln, Melbourne"
+
+
+def test_compare_routes_pedestrian_per_hour_sums_trailing_60_minutes(client, db_session):
+    """Regression test for the "49/min but 21/hour" report: pedestrian_per_hour
+    must be derived from the same near-real-time pedestrian_count_minute table
+    as pedestrian_per_min - summed over the trailing 60 minutes - instead of a
+    separately-batched pedestrian_count_hour row that can be hours or days
+    stale. A reading older than 60 minutes must be excluded from the sum."""
+    lat, lng = -37.9900, 145.1400
+    now = datetime.now(timezone.utc)
+    day_of_week, hourday = melbourne_baseline_slot(now)
+    sensing_dt = now.replace(tzinfo=None)
+
+    _seed_sensor(
+        db_session,
+        9409,
+        lat,
+        lng,
+        current_count=40,  # latest reading -> pedestrian_per_min
+        sensing_dt=sensing_dt,
+        baseline_median=10,
+        day_of_week=day_of_week,
+        hourday=hourday,
+    )
+    # Within the trailing 60-minute window -> must be included in the sum.
+    _add_minute_reading(db_session, 9409, sensing_dt - timedelta(minutes=20), 15)
+    # Older than 60 minutes -> must be excluded from the sum.
+    _add_minute_reading(db_session, 9409, sensing_dt - timedelta(minutes=90), 999)
+
+    response = client.post(
+        "/api/routes/compare",
+        json={
+            "origin_lat": lat,
+            "origin_lng": lng,
+            "destination_lat": lat + 0.001,
+            "destination_lng": lng + 0.001,
+        },
+    )
+    assert response.status_code == 200
+    routes = response.json()["routes"]
+    assert routes
+    for route in routes:
+        assert route["pedestrian_per_min"] == 40
+        assert route["pedestrian_per_hour"] == 55  # 40 + 15; the 999 stale row excluded
+
+
+def test_compare_routes_scores_on_the_hour_not_on_a_single_minute(client, db_session):
+    """The status must follow the trailing hour, not the newest minute alone.
+
+    DS2 calibrated absolute_threshold (500) on `pedestrian_count_hour`, so
+    scoring a single minute against it was ~60x too small - across 18,992
+    live minute-readings exactly one ever reached 500. This sensor's latest
+    minute is far under the threshold while its hour is over it, so the two
+    behaviours give different answers and only the correct one passes.
+    """
+    lat, lng = -37.9950, 145.1500
+    now = datetime.now(timezone.utc)
+    day_of_week, hourday = melbourne_baseline_slot(now)
+    sensing_dt = now.replace(tzinfo=None)
+
+    _seed_sensor(
+        db_session,
+        9410,
+        lat,
+        lng,
+        name="Busy hour, quiet minute",
+        current_count=120,  # on its own: 120 < 500, would score LOW
+        sensing_dt=sensing_dt,
+        baseline_median=100,  # relative bar = 150
+        day_of_week=day_of_week,
+        hourday=hourday,
+    )
+    # Four more minutes inside the window: 120+120+120+120+120 = 600, which
+    # clears both HIGH conditions (>= 500 absolute, >= 150 relative).
+    for minutes_ago in (10, 20, 30, 40):
+        _add_minute_reading(db_session, 9410, sensing_dt - timedelta(minutes=minutes_ago), 120)
+
+    response = client.post(
+        "/api/routes/compare",
+        json={
+            "origin_lat": lat,
+            "origin_lng": lng,
+            "destination_lat": lat + 0.001,
+            "destination_lng": lng + 0.001,
+        },
+    )
+    assert response.status_code == 200
+    routes = response.json()["routes"]
+    assert routes
+    for route in routes:
+        assert route["sensory_status"] == "HIGH"
+        assert route["sensory_value"] == 600  # the hour, not the minute
+        assert route["pedestrian_per_min"] == 120  # the minute is still reported as-is
+        assert route["pedestrian_per_hour"] == 600

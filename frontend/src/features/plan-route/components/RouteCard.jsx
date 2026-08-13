@@ -3,7 +3,6 @@ import styles from './RouteCard.module.css'
 
 const LOAD_STYLES = {
     low: { label: 'Low', bg: '#4d7c62', color: '#ffffff' },
-    medium: { label: 'Medium', bg: '#fbbf24', color: '#78350f' },
     high: { label: 'High', bg: '#ef4444', color: '#ffffff' },
 }
 
@@ -43,8 +42,8 @@ export default function RouteCard({ route, isSelected, onSelect }) {
             </div>
         )}
 
-        {route.crowdDensityPct != null && (
-            <CrowdDensityBar percent={route.crowdDensityPct} level={route.loadLevel} />
+        {route.pedestrianPerMin != null && (
+            <CrowdDensityBar crowd={route.pedestrianPerHour} level={route.loadLevel} />
         )}
 
         <p className={styles.meta}>

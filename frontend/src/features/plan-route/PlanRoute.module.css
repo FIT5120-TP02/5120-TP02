@@ -88,15 +88,25 @@
     gap: 1.25rem;
     margin-top: 1.5rem;
 }
-@media (min-width: 1024px) {
-    .planRouteResults {
-        grid-template-columns: 2fr 3fr;
-    }
-}
 .planRouteResultsRight {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    order: -1;
+}
+.planRouteResultsLeft {
+    order: 0;
+}
+@media (min-width: 1024px) {
+    .planRouteResults {
+        grid-template-columns: 2fr 3fr;
+    }
+    .planRouteResultsRight {
+        order: 0;
+    }
+    .planRouteResultsLeft {
+        order: 0;
+    }
 }
 
 .errorText {
@@ -116,4 +126,64 @@
 }
 .navigationButton:hover {
     background-color: #134e4a;
+}
+
+/* Button to filter routes */
+.sensoryFilterRow {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid #ffffff;
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    margin-top: 1rem;
+}
+
+.sensoryFilterLabel {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #115e59;
+    white-space: nowrap;
+}
+
+.sensoryFilterOptions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.sensoryFilterButton {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid #ccfbf1;
+    background-color: #f0fdfa;
+    color: #0f766e;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.sensoryFilterButton:hover {
+    background-color: #ccfbf1;
+}
+
+.sensoryFilterActive {
+    background-color: #115e59;
+    border-color: #115e59;
+    color: #ffffff;
+}
+
+.sensoryFilterActive:hover {
+    background-color: #134e4a;
+}
+@media (max-width: 480px) {
+    .sensoryFilterRow {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
