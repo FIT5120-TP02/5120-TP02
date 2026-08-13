@@ -20,8 +20,7 @@ NO_DATA = "NO DATA"
 
 MELBOURNE_TIMEZONE = ZoneInfo("Australia/Melbourne")
 
-# A sensor is HIGH when its hourly pedestrian count
-# reaches or exceeds this value.
+# A sensor is HIGH when its hourly pedestrian count reaches or exceeds this value.
 SELECTED_ABSOLUTE_THRESHOLD = 500.0
 
 # Historical baseline must contain at least this many
