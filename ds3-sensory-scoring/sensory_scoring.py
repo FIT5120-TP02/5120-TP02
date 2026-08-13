@@ -6,7 +6,7 @@ import math
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
@@ -19,7 +19,7 @@ HIGH = "HIGH"
 NO_DATA = "NO DATA"
 
 MELBOURNE_TIMEZONE = ZoneInfo("Australia/Melbourne")
-
+DATABASE_TIMEZONE = timezone.utc
 # A sensor is HIGH when its hourly pedestrian count reaches or exceeds this value.
 SELECTED_ABSOLUTE_THRESHOLD = 500.0
 
@@ -60,7 +60,7 @@ class ScoringConfig:
     absolute_threshold: float = SELECTED_ABSOLUTE_THRESHOLD
     minimum_observations: int = SELECTED_MIN_OBSERVATIONS
     minimum_sensors: int = 1
-    live_max_age_minutes: int = 90
+    live_max_age_minutes: int = 30
 
 
 # ==========================================================
@@ -173,20 +173,34 @@ def _is_stale(
     now: datetime,
     max_age_minutes: int,
 ) -> bool:
-    """Check whether a live sensor reading is too old."""
+    """
+    Return True when a reading is missing or older than
+    the configured maximum age.
+
+    Naive database timestamps are interpreted as UTC.
+    """
 
     if observed_at is None:
         return True
 
+    # MySQL DATETIME removes timezone information.
+    # Treat naive database timestamps as UTC.
     if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=MELBOURNE_TIMEZONE)
+        observed_at = observed_at.replace(tzinfo=DATABASE_TIMEZONE)
 
+    # A naive supplied current time is treated as Melbourne local time.
     if now.tzinfo is None:
         now = now.replace(tzinfo=MELBOURNE_TIMEZONE)
 
-    age = now.astimezone(timezone.utc) - observed_at.astimezone(timezone.utc)
+    observed_utc = observed_at.astimezone(timezone.utc)
 
-    return age > timedelta(minutes=max_age_minutes)
+    now_utc = now.astimezone(timezone.utc)
+
+    age_seconds = (now_utc - observed_utc).total_seconds()
+
+    max_age_seconds = max_age_minutes * 60
+
+    return age_seconds > max_age_seconds
 
 
 def melbourne_baseline_slot(
@@ -271,7 +285,7 @@ def load_config(conn) -> ScoringConfig:
         live_max_age_minutes=int(
             values.get(
                 "live_max_age_minutes",
-                90,
+                30,
             )
         ),
     )
@@ -293,75 +307,78 @@ def score_route(
     Score a route as HIGH, LOW or NO DATA.
 
     HIGH:
-        At least one matched sensor has an hourly
-        pedestrian count >= 500.
+        At least one valid, fresh matched sensor has an hourly
+        pedestrian count >= the absolute threshold.
 
     LOW:
-        All valid matched sensors have counts < 500.
+        At least one valid, fresh sensor exists, but all valid
+        sensor counts are below the absolute threshold.
 
     NO DATA:
-        Required sensor or baseline data is unavailable.
+        No matched sensor has a valid, fresh reading and a
+        reliable baseline.
     """
 
     cfg = config or ScoringConfig()
 
+    check_time = now or datetime.now(MELBOURNE_TIMEZONE)
+
     sensor_ids = list(dict.fromkeys(str(sensor_id) for sensor_id in matched_sensor_ids))
 
     if len(sensor_ids) < cfg.minimum_sensors:
-        return (
-            NO_DATA,
-            None,
-        )
+        return NO_DATA, None
 
     valid_sensor_count = 0
 
     for sensor_id in sensor_ids:
 
         reading = readings.get(sensor_id)
-
         baseline = baselines.get(sensor_id)
 
-        if reading is None:
+        # Missing reading or baseline
+        if reading is None or baseline is None:
             continue
 
+        # Invalid count
         if reading.current_count < 0:
             continue
 
-        # Baseline is still checked for data quality,
-        # but it does not determine HIGH or LOW.
-        if baseline is None:
+        # Missing timestamp
+        if reading.observed_at is None:
             continue
 
+        # Stale reading
+        if _is_stale(
+            reading.observed_at,
+            check_time,
+            cfg.live_max_age_minutes,
+        ):
+            continue
+
+        # Invalid baseline
         if baseline.median_count <= 0:
             continue
 
+        # Not enough historical observations
         if baseline.observation_count < cfg.minimum_observations:
             continue
 
+        # Sensor is valid and fresh
         valid_sensor_count += 1
 
-        # ==================================================
-        # HIGH RULE
-        #
-        # Only the current hourly pedestrian count matters.
-        # ==================================================
-
+        # HIGH rule
         if reading.current_count >= cfg.absolute_threshold:
             return (
                 HIGH,
-                ("This route includes a corridor " "with high pedestrian density."),
+                "This route includes a corridor with high pedestrian density.",
             )
 
+    # No valid fresh sensors were available
     if valid_sensor_count < cfg.minimum_sensors:
-        return (
-            NO_DATA,
-            None,
-        )
+        return NO_DATA, None
 
-    return (
-        LOW,
-        None,
-    )
+    # Valid sensors exist, but all are below 500
+    return LOW, None
 
 
 def _sensor_readings_from_sensory_rows(

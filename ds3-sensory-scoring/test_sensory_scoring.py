@@ -130,10 +130,27 @@ class RouteScoringTests(unittest.TestCase):
         baselines = {"1": SensorBaseline("1", 20, 20)}
         self.assertEqual(self.score(["1"], readings, baselines), LOW)
 
-    def test_absolute_threshold_alone_is_low(self):
-        readings = {"1": SensorReading("1", 500, self.now)}
-        baselines = {"1": SensorBaseline("1", 400, 20)}
-        self.assertEqual(self.score(["1"], readings, baselines), LOW)
+    def test_absolute_threshold_is_high(self):
+        readings = {
+            "1": SensorReading(
+                sensor_id="1",
+                current_count=500,
+                observed_at=self.now,
+            )
+        }
+
+        baselines = {
+            "1": SensorBaseline(
+                sensor_id="1",
+                median_count=1000,
+                observation_count=20,
+            )
+        }
+
+        self.assertEqual(
+            self.score(["1"], readings, baselines),
+            HIGH,
+        )
 
     def test_both_thresholds_is_high(self):
         readings = {"1": SensorReading("1", 600, self.now)}
