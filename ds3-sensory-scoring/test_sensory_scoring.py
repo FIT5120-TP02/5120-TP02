@@ -1,6 +1,6 @@
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -17,6 +17,7 @@ from sensory_scoring import (
     match_sensors_to_route,
     melbourne_baseline_slot,
     score_route,
+    score_route_from_database,
 )
 
 
@@ -130,10 +131,27 @@ class RouteScoringTests(unittest.TestCase):
         baselines = {"1": SensorBaseline("1", 20, 20)}
         self.assertEqual(self.score(["1"], readings, baselines), LOW)
 
-    def test_absolute_threshold_alone_is_low(self):
-        readings = {"1": SensorReading("1", 500, self.now)}
-        baselines = {"1": SensorBaseline("1", 400, 20)}
-        self.assertEqual(self.score(["1"], readings, baselines), LOW)
+    def test_absolute_threshold_is_high(self):
+        readings = {
+            "1": SensorReading(
+                sensor_id="1",
+                current_count=500,
+                observed_at=self.now,
+            )
+        }
+
+        baselines = {
+            "1": SensorBaseline(
+                sensor_id="1",
+                median_count=1000,
+                observation_count=20,
+            )
+        }
+
+        self.assertEqual(
+            self.score(["1"], readings, baselines),
+            HIGH,
+        )
 
     def test_both_thresholds_is_high(self):
         readings = {"1": SensorReading("1", 600, self.now)}
@@ -152,6 +170,109 @@ class RouteScoringTests(unittest.TestCase):
             "2": SensorBaseline("2", 400, 20),
         }
         self.assertEqual(self.score(["1", "2"], readings, baselines), HIGH)
+
+    def test_hourly_record_after_half_hour_is_not_stale(self):
+        now = datetime(
+            2026,
+            8,
+            9,
+            2,
+            45,
+            tzinfo=timezone.utc,
+        )
+
+        hourly_reading = datetime(
+            2026,
+            8,
+            9,
+            2,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+        readings = {
+            "1": SensorReading(
+                "1",
+                800,
+                hourly_reading,
+            )
+        }
+
+        baselines = {
+            "1": SensorBaseline(
+                "1",
+                300,
+                20,
+            )
+        }
+
+        status, _ = score_route(
+            ["1"],
+            readings,
+            baselines,
+            self.config,
+            now,
+            enforce_freshness=False,
+        )
+
+        self.assertEqual(status, HIGH)
+
+
+class DatabaseRouteScoringTests(unittest.TestCase):
+    class FakeCursor:
+        def __init__(self):
+            self.rows = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def execute(self, query, params=None):
+            if "FROM config" in query:
+                self.rows = []
+            elif "FROM location" in query:
+                self.rows = [
+                    {
+                        "location_id": 1,
+                        "latitude": -37.812,
+                        "longitude": 144.963,
+                    }
+                ]
+            elif "FROM pedestrian_count_hour" in query:
+                self.rows = [
+                    {
+                        "location_id": 1,
+                        "pedestrian_count": 800,
+                        "sensing_date": date(2026, 8, 9),
+                        "day_of_week": 6,
+                        "hourday": 2,
+                    }
+                ]
+            elif "FROM baseline" in query:
+                self.rows = [{"median_count": 300, "observation_count": 20}]
+            else:
+                raise AssertionError(f"Unexpected query: {query}")
+
+        def fetchall(self):
+            return self.rows
+
+        def fetchone(self):
+            return self.rows[0] if self.rows else None
+
+    class FakeConnection:
+        def cursor(self):
+            return DatabaseRouteScoringTests.FakeCursor()
+
+    def test_hourly_database_record_is_not_rejected_as_stale(self):
+        status, _ = score_route_from_database(
+            [[-37.814, 144.963], [-37.810, 144.963]],
+            self.FakeConnection(),
+            now=datetime(2026, 8, 9, 2, 45, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status, HIGH)
 
 
 class BaselineTimezoneTests(unittest.TestCase):
