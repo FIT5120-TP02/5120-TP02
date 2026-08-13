@@ -56,7 +56,6 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
 
             if (!isWithinCBD(origin) || !isWithinCBD(destination)) {
                 setError('Senseway currently supports routes within our Melbourne CBD coverage area.')
-                alert('Senseway currently supports routes within our Melbourne CBD coverage area.')
                 setRoutes([])
                 setLoading(false)
                 return
