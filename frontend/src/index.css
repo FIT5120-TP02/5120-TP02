@@ -36,7 +36,7 @@ header {
   margin-right: auto;
   padding-left: 1.5rem;
   padding-right: 1.5rem;
-  height: 4rem;
+  height: 5rem;
   background-color: rgba(255, 255, 255, 0.521);
 }
 
@@ -88,7 +88,7 @@ header {
 .header-navigation {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 1rem;
 }
 .header-navigation button {
   border: none;

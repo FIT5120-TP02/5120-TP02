@@ -3,16 +3,9 @@
     margin-top: 2rem;
 }
 
-.DashboardDisplay {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-}
-@media (min-width: 1024px) {
-    .DashboardDisplay {
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
+/* .DashboardDisplay {
+    display: flex;
+} */
 
 .DashboardLive {
     background-color: #1b5f7b;
@@ -93,7 +86,7 @@
 .DashboardCrowdDensityAlert {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
+    gap: 1rem;
     text-align: right;
 }
 .CrowdContainer p, .AlertContainer p {
@@ -329,11 +322,11 @@
 }
 @media (min-width: 1024px) {
     .ForecastNavContainer {
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 /* Forecast Chart */
-.forecastChart {
+/* .forecastChart {
     background-color: rgba(255, 255, 255, 0.7);
     border: 1px solid #ffffff;
     border-radius: 1rem;
@@ -343,11 +336,11 @@
     .forecastChart {
         grid-column: span 3 / span 3;
     }
-}
+} */
 /* NavCard */
 .navCards {
     display: grid;
-    flex-direction: column;
+    flex-direction: row;
     gap: 1rem;
 }
 @media (min-width: 1024px) {

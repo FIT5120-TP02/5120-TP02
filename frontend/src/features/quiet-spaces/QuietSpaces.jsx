@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import styles from './QuietSpaces.module.css'
 import { fetchRefuges } from './api/fetchRefuges'
 import SensoryRing from './components/SensoryRing'
@@ -28,6 +28,19 @@ export default function QuietSpaces({onNavigate}) {
     const [selectedId, setSelectedId] = useState(null)
     const [radiusKm, setRadiusKm] = useState(0.5)
     const [loading, setLoading] = useState(true)
+    const detailColumnRef = useRef(null)
+
+    function handleSelectRefuge(refugeId) {
+        setSelectedId(refugeId)
+        if(window.innerWidth < 1024 && detailColumnRef.current) {
+            const y = detailColumnRef.current.getBoundingClientRect().top + window.scrollY - 80
+            window.scrollTo({
+                top: y,
+                behavior: 'smooth',
+                block: 'start'
+                })
+            }
+    }
 
     useEffect(() => {
         if (locationLoading) return
@@ -66,7 +79,6 @@ export default function QuietSpaces({onNavigate}) {
             }
             return (b.sensoryScore ?? 0) - (a.sensoryScore ?? 0)
         })
-
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
     return (
         <>
@@ -137,7 +149,7 @@ export default function QuietSpaces({onNavigate}) {
                                 <button
                                     key={refuge.id}
                                     className={`${styles.refugeCard} ${isSelected ? styles.refugeCardSelected : ''}`}
-                                    onClick={() => setSelectedId(refuge.id)}
+                                    onClick={() => handleSelectRefuge(refuge.id)}
                                 >
                                     {refuge.sensoryScore != null && <SensoryRing score={refuge.sensoryScore} />}
                                     <div className={styles.refugeCardBody}>
@@ -160,7 +172,7 @@ export default function QuietSpaces({onNavigate}) {
                         })}
                     </div>
 
-                    <div className={styles.detailColumn}>
+                    <div className={styles.detailColumn} ref={detailColumnRef}>
                         {selectedRefuge && (
                             <div className={styles.detailPanel}>
                                 <div className={styles.detailHeader}>
