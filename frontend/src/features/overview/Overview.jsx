@@ -38,9 +38,7 @@ export default function Overview({onNavigate}) {
     const now = new Date()
     const currentTime = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})
     const hour = now.getHours() // 0-23, actual number
-    const sensoryLevel = hour >= 7 && hour <= 9 ? 'High'
-        : hour >= 11 && hour <= 14 ? 'Medium'
-        : 'Low'
+    
     const [conditions, setConditions] = useState(null)
     const [loading, setLoading] = useState(true)
     const [threshold, setThreshold] = useState(60)
@@ -75,6 +73,10 @@ export default function Overview({onNavigate}) {
         loadConditions()
         loadRefugeCount()
     }, [locationLoading, userLocation?.lat, userLocation?.lng, hasFetchedConditions])
+
+    const sensoryLevel = conditions?.pedestrianPerHour >= 700 ? 'High'
+        : conditions?.pedestrianPerHour >= 400 ? 'Medium'
+        : 'Low'
     return (
         <>
             <div className="HeaderContainer">

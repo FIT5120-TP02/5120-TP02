@@ -40,7 +40,12 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
             window.scrollTo({
                 top: y,
                 behavior: 'smooth',
-                block: 'start'
+            })
+        }
+        if(window.innerWidth >= 1024) {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
             })
         }
     }

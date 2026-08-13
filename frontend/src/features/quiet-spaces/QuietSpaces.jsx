@@ -39,7 +39,13 @@ export default function QuietSpaces({onNavigate}) {
                 behavior: 'smooth',
                 block: 'start'
                 })
-            }
+        }
+        if(window.innerWidth >= 1024 && detailColumnRef.current) {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            })
+        }
     }
 
     useEffect(() => {
