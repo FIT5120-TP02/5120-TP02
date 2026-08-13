@@ -43,6 +43,7 @@ def list_refuges(
                 location_id=row.location_id,
                 name=row.location_name,
                 category=row.category or "refuge",
+                address=row.address or row.location_name,
                 eta_min=round(eta_min, 1),
                 lat=row.latitude,
                 lng=row.longitude,

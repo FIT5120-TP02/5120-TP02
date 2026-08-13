@@ -42,7 +42,12 @@ class RouteOption(BaseModel):
     # the `address` table falls within the search radius of it.
     address_pnt: str | None = None
     pedestrian_per_min: float | None = None  # same reading as sensory_value, for display
-    pedestrian_per_hour: float | None = None  # latest hourly aggregate for that same sensor
+    # Trailing 60-minute total for that same sensor, summed live from
+    # pedestrian_count_minute (see routes.py::_latest_hourly_counts) - NOT
+    # DS1's pedestrian_count_hour archive, which is batch-loaded roughly
+    # daily and was previously found to drift out of sync with
+    # pedestrian_per_min (e.g. "49/min but 21/hour" for the same sensor).
+    pedestrian_per_hour: float | None = None
 
 
 class RouteCompareResponse(BaseModel):
@@ -55,6 +60,11 @@ class RefugeLocationOut(BaseModel):
     location_id: int
     name: str
     category: str
+    # DS-confirmed against the live DB: location.address has a real street
+    # address (with number) for 79/92 refuge rows - null for the rest, and
+    # always null for non-refuge rows. `name` (location_name) is the
+    # fallback used whenever address is null, so this field is never empty.
+    address: str
     eta_min: float
     lat: float
     lng: float
