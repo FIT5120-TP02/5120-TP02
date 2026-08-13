@@ -363,6 +363,7 @@ def score_route(
         None,
     )
 
+
 def _sensor_readings_from_sensory_rows(
     rows,
 ) -> tuple[dict[str, SensorReading], set[str]]:
@@ -373,32 +374,25 @@ def _sensor_readings_from_sensory_rows(
     The returned set records all sensor IDs covered by the query.
     """
 
-    covered_sensor_ids = {
-        str(row["location_id"])
-        for row in rows
-    }
+    covered_sensor_ids = {str(row["location_id"]) for row in rows}
 
     readings = {
         str(row["location_id"]): SensorReading(
             sensor_id=str(row["location_id"]),
-            current_count=float(
-                row["pedestrian_count"]
-            ),
+            current_count=float(row["pedestrian_count"]),
             observed_at=row["window_end"],
         )
         for row in rows
         if (
-            str(
-                row["sensory_status"]
-            ).upper()
-            in {LOW, HIGH}
-            and row["pedestrian_count"]
-            is not None
+            str(row["sensory_status"]).upper() in {LOW, HIGH}
+            and row["pedestrian_count"] is not None
             and row["pedestrian_count"] >= 0
         )
     }
 
     return readings, covered_sensor_ids
+
+
 # ==========================================================
 # SCORE ROUTE FROM DATABASE
 # ==========================================================
