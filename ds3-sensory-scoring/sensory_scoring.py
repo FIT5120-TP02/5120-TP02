@@ -7,8 +7,8 @@ import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from itertools import pairwise
+from zoneinfo import ZoneInfo
 
 # ==========================================================
 # CONSTANTS
