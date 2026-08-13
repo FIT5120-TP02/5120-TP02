@@ -32,14 +32,13 @@ export default function QuietSpaces({onNavigate}) {
 
     function handleSelectRefuge(refugeId) {
         setSelectedId(refugeId)
-        if(window.innerWidth < 1024 && detailColumnRef.current) {
-            const y = detailColumnRef.current.getBoundingClientRect().top + window.scrollY - 80
+        if(detailColumnRef.current) {
+            const y = detailColumnRef.current.getBoundingClientRect().top + window.scrollY - 100
             window.scrollTo({
                 top: y,
                 behavior: 'smooth',
-                block: 'start'
                 })
-            }
+        }
     }
 
     useEffect(() => {

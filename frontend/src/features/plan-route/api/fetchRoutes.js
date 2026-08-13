@@ -15,7 +15,6 @@ export async function fetchRoutes({ origin, destination}) {
             destination?.lng == null) {
         throw new Error('Missing coordinates')
         }
-        console.log('Fetch Routes')
         const res = await fetchWithTimeout(`${API_BASE_URL}/api/routes/compare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31,22 +30,6 @@ export async function fetchRoutes({ origin, destination}) {
             throw new Error(`API returned ${res.status}`)
         }
         const data = await res.json()
-
-        console.table(
-            data.routes.map((route) => ({
-                origin: origin,
-                destination: destination,
-                id: route.route_id,
-                name: route.label,
-                distance: route.distance_km,
-                duration: route.duration_min,
-                sensory_load: route.sensory_status,
-                sensory_val: route.sensory_value,
-                address: route.address_pnt,
-                pedestrian_per_min: route.pedestrian_per_min,
-                pedestrian_per_hour: route.pedestrian_per_hour
-            }))
-        )
 
         if (!data.routes || data.routes.length === 0) {
             throw new Error('No routes returned')
