@@ -170,6 +170,52 @@ class RouteScoringTests(unittest.TestCase):
         }
         self.assertEqual(self.score(["1", "2"], readings, baselines), HIGH)
 
+    def test_hourly_record_after_half_hour_is_not_stale(self):
+        now = datetime(
+            2026,
+            8,
+            9,
+            2,
+            45,
+            tzinfo=timezone.utc,
+        )
+
+        hourly_reading = datetime(
+            2026,
+            8,
+            9,
+            2,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+        readings = {
+            "1": SensorReading(
+                "1",
+                800,
+                hourly_reading,
+            )
+        }
+
+        baselines = {
+            "1": SensorBaseline(
+                "1",
+                300,
+                20,
+            )
+        }
+
+        status, _ = score_route(
+            ["1"],
+            readings,
+            baselines,
+            self.config,
+            now,
+            enforce_freshness=False,
+        )
+
+        self.assertEqual(status, HIGH)
+
 
 class BaselineTimezoneTests(unittest.TestCase):
     def test_utc_time_is_converted_to_melbourne_slot(self):

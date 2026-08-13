@@ -302,21 +302,25 @@ def score_route(
     baselines: Mapping[str, SensorBaseline],
     config: ScoringConfig | None = None,
     now: datetime | None = None,
+    enforce_freshness: bool = True,
 ) -> tuple[str, str | None]:
     """
     Score a route as HIGH, LOW or NO DATA.
 
     HIGH:
-        At least one valid, fresh matched sensor has an hourly
+        At least one valid matched sensor has an hourly
         pedestrian count >= the absolute threshold.
 
     LOW:
-        At least one valid, fresh sensor exists, but all valid
+        At least one valid sensor exists, but all valid
         sensor counts are below the absolute threshold.
 
     NO DATA:
-        No matched sensor has a valid, fresh reading and a
-        reliable baseline.
+        No matched sensor has valid data.
+
+    Freshness checking is enabled for live readings.
+    Hourly or historical scoring can disable freshness because
+    these records do not represent a live 30-minute window.
     """
 
     cfg = config or ScoringConfig()
@@ -335,49 +339,40 @@ def score_route(
         reading = readings.get(sensor_id)
         baseline = baselines.get(sensor_id)
 
-        # Missing reading or baseline
         if reading is None or baseline is None:
             continue
 
-        # Invalid count
         if reading.current_count < 0:
             continue
 
-        # Missing timestamp
         if reading.observed_at is None:
             continue
 
-        # Stale reading
-        if _is_stale(
+        # Only apply the 30-minute rule to live data.
+        if enforce_freshness and _is_stale(
             reading.observed_at,
             check_time,
             cfg.live_max_age_minutes,
         ):
             continue
 
-        # Invalid baseline
         if baseline.median_count <= 0:
             continue
 
-        # Not enough historical observations
         if baseline.observation_count < cfg.minimum_observations:
             continue
 
-        # Sensor is valid and fresh
         valid_sensor_count += 1
 
-        # HIGH rule
         if reading.current_count >= cfg.absolute_threshold:
             return (
                 HIGH,
                 "This route includes a corridor with high pedestrian density.",
             )
 
-    # No valid fresh sensors were available
     if valid_sensor_count < cfg.minimum_sensors:
         return NO_DATA, None
 
-    # Valid sensors exist, but all are below 500
     return LOW, None
 
 
