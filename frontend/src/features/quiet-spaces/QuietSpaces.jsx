@@ -24,7 +24,6 @@ export default function QuietSpaces({onNavigate}) {
     const { userLocation, loading: locationLoading } = useLiveLocation()
     const [refuges, setRefuges] = useState([])
     const [filter, setFilter] = useState('all')
-    const [sortBy, setSortBy] = useState('distance')
     const [selectedId, setSelectedId] = useState(null)
     const [radiusKm, setRadiusKm] = useState(0.5)
     const [loading, setLoading] = useState(true)
@@ -70,13 +69,7 @@ export default function QuietSpaces({onNavigate}) {
     const filtered = refuges
         .filter((r) => filter === 'all' || r.type === filter)
         .sort((a, b) => {
-            if (sortBy === 'distance') {
-                // real data has no distanceM yet — fall back to walkMinutes
-                const aVal = a.distanceM ?? a.walkMinutes
-                const bVal = b.distanceM ?? b.walkMinutes
-                return aVal - bVal
-            }
-            return (b.sensoryScore ?? 0) - (a.sensoryScore ?? 0)
+            return (a.walkMinutes ?? 0) - (b.walkMinutes ?? 0)
         })
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
     return (
@@ -102,10 +95,6 @@ export default function QuietSpaces({onNavigate}) {
                             </p>
                         </div>
                     </div>
-                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={styles.sortSelect}>
-                        <option value="distance">Sort: Nearest first</option>
-                        <option value="score">Sort: Calmest first</option>
-                    </select>
                     <div className={styles.radiusRow}>
                         <div className={styles.radiusHeader}>
                             <span className={styles.radiusLabel}>Search radius</span>
@@ -114,7 +103,7 @@ export default function QuietSpaces({onNavigate}) {
                         <input
                             type="range"
                             min={0.5}
-                            max={10}
+                            max={5}
                             step={0.5}
                             value={radiusKm}
                             onChange={(e) => setRadiusKm(Number(e.target.value))}
@@ -122,7 +111,7 @@ export default function QuietSpaces({onNavigate}) {
                         />
                         <div className={styles.radiusRange}>
                             <span>0.5 km</span>
-                            <span>10 km</span>
+                            <span>5 km</span>
                         </div>
                     </div>
                 </div>
