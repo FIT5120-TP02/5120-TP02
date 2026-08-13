@@ -62,6 +62,21 @@ class ScoringConfig:
     buffer_radius_m: float = 120.0
     relative_threshold: float = 1.5
     absolute_threshold: float = 500.0
+    # A count this high is HIGH however busy the street usually is. Without
+    # it, somewhere permanently crowded can never flag: a sensor whose
+    # typical hour is 1,745 needs 2,618 before the relative rule fires, so it
+    # reads LOW at 1,774 - true, but not what someone sensitive to crowds is
+    # asking.
+    #
+    # 800/hour is the 84.3rd percentile of a year of history. It leaves about
+    # 15% of baseline slots permanently HIGH - the busiest corridors through
+    # most of the working day - which is the deliberate trade for catching
+    # streets that are crowded every day rather than only unusual ones.
+    #
+    # Do not set this to absolute_threshold (500). The relative branch would
+    # never decide anything, since every count reaching it also clears the
+    # ceiling, and the rule collapses to plain absolute scoring.
+    crowded_absolute_threshold: float = 800.0
     minimum_observations: int = 10
     minimum_sensors: int = 1
     live_max_age_minutes: int = 30
@@ -145,7 +160,19 @@ def score_route(
     """Return ``(LOW|HIGH|NO DATA, notification)`` for one route.
 
     LOW is returned only when every matched sensor has a fresh reading and a
-    reliable baseline. HIGH requires both DS2's absolute and relative limits.
+    reliable baseline.
+
+    HIGH means either of two different things, and both matter:
+
+    - the corridor is busier than it normally is at this hour (DS2's absolute
+      and relative limits together), or
+    - the corridor is crowded outright, regardless of what normal looks like
+      there (``crowded_absolute_threshold``).
+
+    Only the first was checked before, which left a hole: a street that is
+    always busy never flags, because its own history sets the bar out of
+    reach. Only the second would be worse - the busiest streets would sit at
+    HIGH permanently, which tells a user nothing they cannot see on a map.
     """
     cfg = config or ScoringConfig()
     check_time = now or datetime.now(timezone.utc)
@@ -165,17 +192,30 @@ def score_route(
             return NO_DATA, None
         if _is_stale(reading.observed_at, check_time, cfg.live_max_age_minutes):
             return NO_DATA, None
-    high_sensor_ids = [
+    unusual = [
         sensor_id
         for sensor_id in sensor_ids
         if readings[sensor_id].current_count >= cfg.absolute_threshold
         and readings[sensor_id].current_count
         >= baselines[sensor_id].median_count * cfg.relative_threshold
     ]
-    if high_sensor_ids:
+    if unusual:
         return (
             HIGH,
             "This route includes a corridor with unusually high pedestrian density.",
+        )
+    crowded = [
+        sensor_id
+        for sensor_id in sensor_ids
+        if readings[sensor_id].current_count >= cfg.crowded_absolute_threshold
+    ]
+    if crowded:
+        # Deliberately different wording. "Unusually high" would be false
+        # here - this corridor is this busy most days, and a user deciding
+        # whether to walk it deserves to know which of the two it is.
+        return (
+            HIGH,
+            "This route includes a consistently crowded corridor.",
         )
     return LOW, None
 
@@ -189,6 +229,7 @@ def load_config(conn) -> ScoringConfig:
         buffer_radius_m=float(values.get("route_buffer_radius_m", 120)),
         relative_threshold=float(values.get("relative_threshold", 1.5)),
         absolute_threshold=float(values.get("absolute_threshold", 500)),
+        crowded_absolute_threshold=float(values.get("crowded_absolute_threshold", 800)),
         minimum_observations=int(values.get("minimum_observations", 10)),
         minimum_sensors=int(values.get("minimum_route_sensors", 1)),
         live_max_age_minutes=int(values.get("live_max_age_minutes", 30)),
