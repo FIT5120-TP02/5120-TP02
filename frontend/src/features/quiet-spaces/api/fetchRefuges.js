@@ -1,4 +1,5 @@
 import { mockRefuges } from './mockRefuges'
+import { fetchWithTimeout } from '../../../lib/fetchWithTimeout'
 import { transformRefuge } from './transformRefuges'
 
 const API_BASE = 'https://five120-tp02.onrender.com'
@@ -18,7 +19,7 @@ export async function fetchRefuges({ lat, lng, radiusKm = 1.5 } = {}) {
             radius_km: String(radiusKm),
         })
 
-        const res = await fetch(`${API_BASE}/api/refuges?${params}`)
+        const res = await fetchWithTimeout(`${API_BASE}/api/refuges?${params}`)
         if (!res.ok) throw new Error(`API returned ${res.status}`)
 
         const data = await res.json()
@@ -28,7 +29,7 @@ export async function fetchRefuges({ lat, lng, radiusKm = 1.5 } = {}) {
 
         return data.refuges.map(transformRefuge)
     } catch (err) {
-        console.error('[fetchRefuges] Live API unavailable, using mock data:', err)
+        console.error('[fetchRefuges] Live API unavailable:', err)
         throw err
     }
 }

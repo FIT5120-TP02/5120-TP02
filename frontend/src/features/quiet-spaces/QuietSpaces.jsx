@@ -193,7 +193,7 @@ export default function QuietSpaces({onNavigate}) {
                                         <h3 className={styles.detailName}>{selectedRefuge.name}</h3>
                                         {selectedRefuge.address && (
                                             <p className={styles.detailAddress}>
-                                                {selectedRefuge.address}{selectedRefuge.suburb ? `, ${selectedRefuge.suburb}` : ''}
+                                                {selectedRefuge.address}
                                             </p>
                                         )}
                                     </div>

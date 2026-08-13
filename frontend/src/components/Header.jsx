@@ -21,7 +21,6 @@ export default function Header(props) {
                 <nav className="header-navigation">
 
                     <button className={props.activeButton === 'Plan Route' ? 'active' : ''} onClick={() => handleButtonClick('Plan Route')}><span>↗ Plan Route</span></button>
-                    <button className={props.activeButton === 'Live Alerts' ? 'active' : ''} onClick={() => handleButtonClick('Live Alerts')}><span>◎ Live Alerts</span></button>
                     <button className={props.activeButton === 'Quiet Spaces' ? 'active' : ''} onClick={() => handleButtonClick('Quiet Spaces')}><span>♡ Quiet Spaces</span></button>
 
                 </nav>
