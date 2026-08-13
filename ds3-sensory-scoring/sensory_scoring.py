@@ -569,6 +569,7 @@ def score_route_from_database(
         baselines,
         cfg,
         score_time,
+        enforce_freshness=False,
     )
 
 
