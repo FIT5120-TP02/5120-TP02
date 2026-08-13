@@ -46,14 +46,6 @@
     max-width: 32rem;
     line-height: 1.6;
 }
-.sortSelect {
-    font-size: 0.75rem;
-    color: #0f766e;
-    background-color: rgba(255, 255, 255, 0.8);
-    border: 1px solid #ccfbf1;
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
-}
 /* Radius Slider */
 .radiusRow {
     background-color: rgba(255, 255, 255, 0.7);

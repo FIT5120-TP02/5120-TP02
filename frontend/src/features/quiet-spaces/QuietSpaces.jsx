@@ -102,10 +102,6 @@ export default function QuietSpaces({onNavigate}) {
                             </p>
                         </div>
                     </div>
-                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={styles.sortSelect}>
-                        <option value="distance">Sort: Nearest first</option>
-                        <option value="score">Sort: Calmest first</option>
-                    </select>
                     <div className={styles.radiusRow}>
                         <div className={styles.radiusHeader}>
                             <span className={styles.radiusLabel}>Search radius</span>
