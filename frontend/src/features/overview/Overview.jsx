@@ -146,12 +146,12 @@ export default function Overview({onNavigate}) {
                         <div>
                             <p>Current Conditions · Melbourne CBD</p>
                             <div className={styles.DashboardReportBoard}>
-                                {sensoryLevel && (
                                     <div className={styles.DashboardTimeSensor}>
                                         <p>{currentTime}</p>
-                                        <SensoryBadge level={sensoryLevel} />
+                                        {sensoryLevel && (
+                                            <SensoryBadge level={sensoryLevel} />
+                                        )}
                                     </div>
-                                )}
                                 {!loading && conditions?.pedestrianPerHour && (
                                     <div className={styles.CrowdContainer}>
                                         <p>Crowd Density</p>
