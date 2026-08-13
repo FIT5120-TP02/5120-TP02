@@ -24,7 +24,6 @@ export default function QuietSpaces({onNavigate}) {
     const { userLocation, loading: locationLoading } = useLiveLocation()
     const [refuges, setRefuges] = useState([])
     const [filter, setFilter] = useState('all')
-    const [sortBy, setSortBy] = useState('distance')
     const [selectedId, setSelectedId] = useState(null)
     const [radiusKm, setRadiusKm] = useState(0.5)
     const [loading, setLoading] = useState(true)
@@ -70,13 +69,7 @@ export default function QuietSpaces({onNavigate}) {
     const filtered = refuges
         .filter((r) => filter === 'all' || r.type === filter)
         .sort((a, b) => {
-            if (sortBy === 'distance') {
-                // real data has no distanceM yet — fall back to walkMinutes
-                const aVal = a.distanceM ?? a.walkMinutes
-                const bVal = b.distanceM ?? b.walkMinutes
-                return aVal - bVal
-            }
-            return (b.sensoryScore ?? 0) - (a.sensoryScore ?? 0)
+            return (b.walkMinutes ?? 0) - (a.walkMinutes ?? 0)
         })
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
     return (
