@@ -69,7 +69,7 @@ export default function QuietSpaces({onNavigate}) {
     const filtered = refuges
         .filter((r) => filter === 'all' || r.type === filter)
         .sort((a, b) => {
-            return (b.walkMinutes ?? 0) - (a.walkMinutes ?? 0)
+            return (a.walkMinutes ?? 0) - (b.walkMinutes ?? 0)
         })
     const selectedRefuge = refuges.find((r) => r.id === selectedId) ?? null
     return (
