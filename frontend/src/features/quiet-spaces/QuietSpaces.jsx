@@ -118,7 +118,7 @@ export default function QuietSpaces({onNavigate}) {
                         />
                         <div className={styles.radiusRange}>
                             <span>0.5 km</span>
-                            <span>10 km</span>
+                            <span>5 km</span>
                         </div>
                     </div>
                 </div>
