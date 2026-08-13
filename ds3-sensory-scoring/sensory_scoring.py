@@ -8,30 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-
-
-# ==========================================================
-# PYTHON 3.9 COMPATIBILITY
-# ==========================================================
-
-try:
-    from itertools import pairwise
-except ImportError:
-
-    def pairwise(iterable):
-        """Python 3.9 replacement for itertools.pairwise."""
-
-        iterator = iter(iterable)
-
-        try:
-            previous = next(iterator)
-        except StopIteration:
-            return
-
-        for current in iterator:
-            yield previous, current
-            previous = current
-
+from itertools import pairwise
 
 # ==========================================================
 # CONSTANTS
