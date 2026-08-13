@@ -109,6 +109,60 @@ class RouteScoringTests(unittest.TestCase):
         self.assertEqual(self.score(["1", "2"], readings, baselines), HIGH)
 
 
+class CrowdedCorridorTests(unittest.TestCase):
+    """A corridor that is always busy still has to register as busy.
+
+    The relative rule measures a sensor against its own history, so somewhere
+    permanently crowded sets its own bar out of reach: a sensor whose typical
+    hour is 1,745 needs 2,618 before it counts as unusual, and so reads LOW at
+    1,774. True, but a user asking "will this street overwhelm me" is not
+    asking whether today is unusual for that street.
+
+    Thresholds are pinned here rather than inherited from ScoringConfig's
+    defaults, so retuning the real values in the `config` table cannot
+    silently change what these tests assert. What is under test is the rule,
+    not the numbers DS2 happens to have chosen this week.
+    """
+
+    def setUp(self):
+        self.now = datetime(2026, 8, 9, 2, 0, tzinfo=timezone.utc)
+        self.config = ScoringConfig(
+            absolute_threshold=500.0,
+            relative_threshold=1.5,
+            crowded_absolute_threshold=800.0,
+        )
+
+    def test_busy_but_typical_corridor_is_high_on_the_absolute_ceiling(self):
+        # 900 against a typical 800 is a ratio of 1.13 - nowhere near the 1.5
+        # the relative rule wants, so this was LOW before the ceiling existed.
+        readings = {"1": SensorReading("1", 900, self.now)}
+        baselines = {"1": SensorBaseline("1", 800, 20)}
+        status, notification = score_route(["1"], readings, baselines, self.config, self.now)
+        self.assertEqual(status, HIGH)
+        self.assertIn("crowded", notification)
+
+    def test_unusual_corridor_keeps_the_unusual_wording(self):
+        readings = {"1": SensorReading("1", 600, self.now)}
+        baselines = {"1": SensorBaseline("1", 300, 20)}
+        _, notification = score_route(["1"], readings, baselines, self.config, self.now)
+        self.assertIn("unusually", notification)
+
+    def test_below_the_ceiling_and_not_unusual_is_still_low(self):
+        # 700 clears absolute_threshold but is only 1.08x its own normal and
+        # short of the ceiling, so neither branch fires.
+        readings = {"1": SensorReading("1", 700, self.now)}
+        baselines = {"1": SensorBaseline("1", 650, 20)}
+        status, notification = score_route(["1"], readings, baselines, self.config, self.now)
+        self.assertEqual(status, LOW)
+        self.assertIsNone(notification)
+
+    def test_ceiling_does_not_bypass_the_data_quality_checks(self):
+        # Crowded, but the sensor last reported half an hour ago. Stale is stale.
+        readings = {"1": SensorReading("1", 5000, self.now - timedelta(minutes=31))}
+        baselines = {"1": SensorBaseline("1", 800, 20)}
+        self.assertEqual(score_route(["1"], readings, baselines, self.config, self.now)[0], NO_DATA)
+
+
 class BaselineTimezoneTests(unittest.TestCase):
     def test_utc_time_is_converted_to_melbourne_slot(self):
         # 2026-08-08 16:30 UTC is 2026-08-09 02:30 in Melbourne (UTC+10),
