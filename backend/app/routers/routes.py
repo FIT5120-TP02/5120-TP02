@@ -17,8 +17,9 @@ separate `sensors` table) and hand them to DS3's pure
 `match_sensors_to_route()`/`score_route()` functions unchanged.
 """
 
+import math
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
@@ -26,9 +27,8 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
-from app.models import Address, Baseline, Location, PedestrianCountHour, PedestrianCountMinute
+from app.models import Address, Baseline, Location, PedestrianCountMinute
 from app.services import routing_service, sensory_scoring
-from app.services.geo import haversine_km
 from app.services.scoring_config import load_scoring_config
 from app.services.sensory_scoring import (
     HIGH,
@@ -104,28 +104,83 @@ def _latest_readings(db: Session, location_ids: list[int]) -> dict[str, SensorRe
     }
 
 
-def _latest_hourly_counts(db: Session, location_ids: list[int]) -> dict[str, int]:
+def _latest_hourly_counts(db: Session, readings: Mapping[str, SensorReading]) -> dict[str, int]:
     """
-    Latest `pedestrian_count_hour` row per location, for `pedestrian_per_hour`.
-    Matched-sensor lists are small (buffer radius is ~120m), so reducing in
-    Python is simpler than a per-location MAX() subquery here.
+    Trailing 60-minute pedestrian total per location, for `pedestrian_per_hour`
+    - summed directly from `pedestrian_count_minute`, the same near-real-time
+    source `_latest_readings` reads (DS1's `poll_minutes` refreshes it every
+    15 min, keeping a 6h rolling window per sensor).
+
+    The window for each sensor ends at *that sensor's own* latest reading
+    (`readings[sensor_id].observed_at`, already fetched by `_latest_readings`)
+    rather than the API server's wall-clock `now`. This was tried first with
+    a shared `now` anchor and broke live: a sensor whose `pedestrian_per_min`
+    reading was fresh enough to pass score_route's 30-minute staleness check
+    still came back with `pedestrian_per_hour=null` (zero rows matched) -
+    DS1's ingestion job runs on its own machine/clock, and any skew against
+    the API server's clock is enough to push a sensor's actual latest row
+    just outside a window measured from the server's `now`. Anchoring on the
+    sensor's own timestamp instead means the latest reading is trivially
+    always inside its own window (comparisons are naive-DB-value vs.
+    naive-DB-value, never against a live server clock), so
+    `pedestrian_per_hour` can never be null while `pedestrian_per_min` has a
+    value for that same sensor.
+
+    Previously this read the *latest* row of `pedestrian_count_hour` instead
+    - DS1's one-year historical archive, batch-loaded roughly daily via
+    `load_hours()`. That "latest" row could be from hours or days ago,
+    completely unaligned with `pedestrian_per_min`'s near-real-time reading,
+    which is exactly what produced reports like "49/min but 21/hour" for the
+    same sensor.
     """
+    location_ids = [
+        int(sensor_id) for sensor_id, reading in readings.items() if reading.observed_at is not None
+    ]
     if not location_ids:
         return {}
     rows = (
-        db.query(PedestrianCountHour)
-        .filter(PedestrianCountHour.location_id.in_(location_ids))
+        db.query(PedestrianCountMinute)
+        .filter(
+            PedestrianCountMinute.location_id.in_(location_ids),
+            PedestrianCountMinute.total_of_directions.isnot(None),
+        )
         .all()
     )
-    latest: dict[str, tuple] = {}
+    totals: dict[str, int] = {}
     for row in rows:
-        if row.pedestrian_count is None:
+        sensor_id = str(row.location_id)
+        reading = readings.get(sensor_id)
+        if reading is None or reading.observed_at is None:
             continue
-        key = str(row.location_id)
-        candidate_key = (row.sensing_date, row.hourday)
-        if key not in latest or candidate_key > latest[key][0]:
-            latest[key] = (candidate_key, row.pedestrian_count)
-    return {location_id: count for location_id, (_, count) in latest.items()}
+        window_start = reading.observed_at - timedelta(hours=1)
+        if window_start < row.sensing_datetime <= reading.observed_at:
+            totals[sensor_id] = totals.get(sensor_id, 0) + row.total_of_directions
+    return totals
+
+
+def _hourly_readings(
+    readings: Mapping[str, SensorReading], hourly_counts: Mapping[str, int]
+) -> dict[str, SensorReading]:
+    """The same sensors, measured over an hour instead of over one minute.
+
+    score_route compares current_count against two limits DS2 calibrated on
+    the HOURLY table: absolute_threshold (500) and baseline.median_count *
+    1.5 (ds2-baseline/threshold_analysis.py:20,36). Handing it a single
+    minute made that comparison ~60x too small - across 18,992 live
+    minute-readings exactly one ever reached 500, on one sensor out of 99, so
+    HIGH was not rare, it was unreachable, and every route came back LOW or
+    NO DATA no matter how busy the street was.
+
+    `_latest_hourly_counts` already computes the trailing-hour total for
+    `pedestrian_per_hour`, so this only restates it in the shape score_route
+    takes. observed_at is carried through unchanged - freshness is still
+    judged by when the sensor last reported, not by the window's length.
+    """
+    return {
+        sensor_id: SensorReading(sensor_id, float(total), readings[sensor_id].observed_at)
+        for sensor_id, total in hourly_counts.items()
+        if sensor_id in readings
+    }
 
 
 # Bounding-box half-width for _nearest_address's prefilter, in degrees.
@@ -147,27 +202,36 @@ def _nearest_address(db: Session, lat: float, lng: float) -> str | None:
     row (0/273, confirmed against the live DB) - `address` is a separate
     table DS loaded independently.
 
-    No spatial index on (latitude, longitude) as of writing, so this does a
-    plain lat/lng bounding-box prefilter (cheap even on ~50k rows) then an
-    exact haversine distance in Python for the final pick - simpler than
-    teaching MySQL spatial functions for what's only ever a handful of
-    lookups per request (one per route's representative sensor). Returns
-    None if nothing at all falls inside the box (nothing to reasonably
+    There is no index on (latitude, longitude), so the box filter cannot be
+    served by one - EXPLAIN reports `type: ALL` over all 48,762 rows either
+    way. What matters is how many rows come BACK. Ranking in Python meant
+    shipping every row in the box to the app and building an ORM object for
+    each: in the CBD that box holds 13,154 addresses, and this runs once per
+    candidate route. On the deployed instance a single /compare took 79
+    seconds, against 0.5s for endpoints reading the same database. Ordering
+    in SQL returns one row instead.
+
+    Returns None if nothing falls inside the box (nothing to reasonably
     guess an address from).
     """
     box = _ADDRESS_SEARCH_BOX_DEG
-    rows = (
-        db.query(Address)
+    # A degree of longitude is shorter than a degree of latitude (~0.79x at
+    # Melbourne), so raw degree distance would stretch "nearest" east-west.
+    # Scale longitude by cos(lat). Squared, to keep this to arithmetic every
+    # backend understands - MySQL in production, SQLite under test.
+    lng_scale = math.cos(math.radians(lat)) ** 2
+    lat_delta = Address.latitude - lat
+    lng_delta = Address.longitude - lng
+    row = (
+        db.query(Address.address_pnt)
         .filter(
             Address.latitude.between(lat - box, lat + box),
             Address.longitude.between(lng - box, lng + box),
         )
-        .all()
+        .order_by(lat_delta * lat_delta + lng_delta * lng_delta * lng_scale)
+        .first()
     )
-    if not rows:
-        return None
-    nearest = min(rows, key=lambda row: haversine_km(lat, lng, row.latitude, row.longitude))
-    return nearest.address_pnt
+    return row[0] if row else None
 
 
 def _baselines_for_slot(
@@ -279,25 +343,27 @@ def compare_routes(payload: schemas.RouteCompareRequest, db: Session = Depends(g
         matched_location_ids = [int(sid) for sid in matched_ids]
         readings = _latest_readings(db, matched_location_ids)
         baselines = _baselines_for_slot(db, matched_location_ids, day_of_week, hourday)
-        hourly_counts = _latest_hourly_counts(db, matched_location_ids)
-        status, notification = sensory_scoring.score_route(
-            matched_ids, readings, baselines, cfg, now
-        )
+        hourly_counts = _latest_hourly_counts(db, readings)
+        # Scored on the hourly figure, because that is the unit DS2's
+        # thresholds are in. `readings` stays per-minute for display below.
+        scored = _hourly_readings(readings, hourly_counts)
+        status, notification = sensory_scoring.score_route(matched_ids, scored, baselines, cfg, now)
 
         avoided_corridor = None
         if status == sensory_scoring.HIGH:
             avoided_corridor = candidate.label
 
-        representative_id = _representative_sensor(status, matched_ids, readings, baselines, cfg)
+        representative_id = _representative_sensor(status, matched_ids, scored, baselines, cfg)
 
         sensory_value = None
         address_pnt = None
         pedestrian_per_min = None
         pedestrian_per_hour = None
         if representative_id is not None:
-            reading = readings[representative_id]
-            sensory_value = reading.current_count
-            pedestrian_per_min = reading.current_count
+            # sensory_value is the number the status was decided on, so it
+            # follows the scored figure rather than the raw minute.
+            sensory_value = scored[representative_id].current_count
+            pedestrian_per_min = readings[representative_id].current_count
             pedestrian_per_hour = hourly_counts.get(representative_id)
             sensor_location = sensor_by_id.get(representative_id)
             if sensor_location is not None:
