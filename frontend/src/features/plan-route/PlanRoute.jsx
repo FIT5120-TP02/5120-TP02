@@ -35,17 +35,11 @@ export default function PlanRoute({ initialDestination = '', initialDestinationC
 
     function handleSelectRoute(routeID) {
         setSelectedRouteId(routeID)
-        if(window.innerWidth < 1024 && resultsRef.current) {
-            const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 80
+        if(resultsRef.current) {
+            const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 100
             window.scrollTo({
                 top: y,
                 behavior: 'smooth',
-            })
-        }
-        if(window.innerWidth >= 1024) {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
             })
         }
     }

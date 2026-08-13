@@ -34,7 +34,6 @@ export async function fetchConditions( userLocation ) {
         }
 
         const route = data.routes[0]
-        console.log('Full route: ', route)
 
         return {
             pedestrianPerHour: route.pedestrian_per_hour,

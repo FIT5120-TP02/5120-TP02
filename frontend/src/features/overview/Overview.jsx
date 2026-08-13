@@ -56,11 +56,10 @@ export default function Overview({onNavigate}) {
                 setLoading(true)
                 const originPoint = userLocation ?? KNOWN_LOCATIONS['My Location — Melbourne CBD']
                 const data = await fetchConditions(originPoint)
-                console.log('Conditions: ', data)
                 setConditions(data)
                 setHasFetchedConditions(true)
             } catch (err) {
-                console.log('[Overview] failed to load conditions:', err)
+                console.error('[Overview] failed to load conditions:', err)
             } finally {
                 setLoading(false)
             }
@@ -74,9 +73,13 @@ export default function Overview({onNavigate}) {
         loadRefugeCount()
     }, [locationLoading, userLocation?.lat, userLocation?.lng, hasFetchedConditions])
 
-    const sensoryLevel = conditions?.pedestrianPerHour >= 700 ? 'High'
-        : conditions?.pedestrianPerHour >= 400 ? 'Medium'
-        : 'Low'
+    const pedestrianPerHour = conditions?.pedestrianPerHour
+    const sensoryLevel = 
+        typeof pedestrianPerHour === 'number' ?
+            conditions?.pedestrianPerHour >= 700 ? 'High'
+                : conditions?.pedestrianPerHour >= 400 ? 'Medium'
+                    : 'Low'
+        : null
     return (
         <>
             <div className="HeaderContainer">
@@ -143,10 +146,12 @@ export default function Overview({onNavigate}) {
                         <div>
                             <p>Current Conditions · Melbourne CBD</p>
                             <div className={styles.DashboardReportBoard}>
-                                <div className={styles.DashboardTimeSensor}>
-                                    <p>{currentTime}</p>
-                                    <SensoryBadge level={sensoryLevel} />
-                                </div>
+                                {sensoryLevel && (
+                                    <div className={styles.DashboardTimeSensor}>
+                                        <p>{currentTime}</p>
+                                        <SensoryBadge level={sensoryLevel} />
+                                    </div>
+                                )}
                                 {!loading && conditions?.pedestrianPerHour && (
                                     <div className={styles.CrowdContainer}>
                                         <p>Crowd Density</p>

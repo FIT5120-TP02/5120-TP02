@@ -15,7 +15,6 @@ export async function fetchRoutes({ origin, destination}) {
             destination?.lng == null) {
         throw new Error('Missing coordinates')
         }
-        console.log('Fetch Routes')
         const res = await fetchWithTimeout(`${API_BASE_URL}/api/routes/compare`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
