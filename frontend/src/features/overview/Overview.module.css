@@ -14,6 +14,7 @@
     color: #ffffff;
     position: relative;
     overflow: hidden;
+    max-width: 40rem; 
 }
 @media (min-width: 1024px) {
     .DashboardLive {
@@ -54,10 +55,15 @@
 }
 .DashboardReportBoard {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 1rem;
+}
+
+.DashboardTimeSensor {
+    display: flex;
+    flex-direction: column;
 }
 .DashboardTimeSensor p {
     font-size: 3rem;
@@ -65,6 +71,7 @@
     font-weight: 300;
     margin-bottom: 0.75rem;
 }
+
 .SensorDisplay {
     display: inline-flex;
     align-items: center;
@@ -83,33 +90,25 @@
     border-radius: 9999px;
 }
 
-.DashboardCrowdDensityAlert {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+.CrowdContainer {
     text-align: right;
 }
-.CrowdContainer p, .AlertContainer p {
+.CrowdContainer p {
     margin: 0;
 }
-.CrowdContainer > p:first-child, .AlertContainer > p:first-child {
-    color: #2dd4bf;
-    font-size: 0.75rem; /* 12px */
-    line-height: 1rem; /* 16px */
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    margin-bottom: 0.25rem; /* 4px */
-}
-.CrowdContainer > p:nth-child(2), .AlertContainer > p:nth-child(2) {
-    font-size: 2.25rem; /* 36px */
-    line-height: 2.5rem; /* 40px */
-    font-weight: 300;
-    color: #ffffff;
-}
-.CrowdContainer > p:last-child, .AlertContainer > p:last-child {
+.CrowdContainer > p:first-child {
     color: #2dd4bf;
     font-size: 0.75rem;
     line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    margin-bottom: 0.25rem;
+}
+.CrowdContainer > p:nth-child(2) {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+    font-weight: 300;
+    color: #ffffff;
 }
 
 /* Sensory Threshold */
