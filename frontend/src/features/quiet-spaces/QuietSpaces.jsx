@@ -110,7 +110,7 @@ export default function QuietSpaces({onNavigate}) {
                         <input
                             type="range"
                             min={0.5}
-                            max={10}
+                            max={5}
                             step={0.5}
                             value={radiusKm}
                             onChange={(e) => setRadiusKm(Number(e.target.value))}
